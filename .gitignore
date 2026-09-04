@@ -47,6 +47,7 @@ dist/
 .cursor/
 AGENTS.md
 PROJECT_STATUS.md
+*_HANDOFF.md
 
 # IDE and OS noise
 .idea/
