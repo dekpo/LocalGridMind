@@ -1,0 +1,23 @@
+# LocalGridMind runtime dependencies
+# Python 3.10+ required.
+#
+# llama-cpp-python must be installed with a CPU wheel on this machine
+# (Intel i7-150U, no usable dedicated GPU). After creating the venv, prefer:
+#
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+#
+# Then install the rest of this file:
+#
+#   pip install -r requirements.txt
+#
+# If the CPU extra index is unavailable, a source build needs Visual Studio
+# Build Tools (C++) and is much slower:
+#
+#   $env:CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_NATIVE=ON"
+#   pip install llama-cpp-python --no-binary llama-cpp-python
+
+streamlit>=1.40.0,<2.0.0
+pandas>=2.2.0,<3.0.0
+openpyxl>=3.1.5,<4.0.0
+plotly>=5.24.0,<6.1.0
+llama-cpp-python>=0.3.0,<0.4.0

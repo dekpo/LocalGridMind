@@ -1,0 +1,62 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.ipynb_checkpoints/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Large local LLM weights — never commit these
+# PyInstaller can still copy models/ at package time from the local disk
+models/**/*.gguf
+*.gguf
+*.bin
+*.ggml
+
+# User uploads and generated artifacts
+data/uploads/*
+!data/uploads/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# Packaging and build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+*.manifest
+*.spec.bak
+
+# Local AI / vibe-coding helpers — never publish
+.cursor/
+AGENTS.md
+PROJECT_STATUS.md
+
+# IDE and OS noise
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+logs/
