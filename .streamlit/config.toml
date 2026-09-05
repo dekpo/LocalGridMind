@@ -1,0 +1,13 @@
+# Local Streamlit settings. Keep this file small and Windows-friendly.
+
+[browser]
+gatherUsageStats = false
+
+[server]
+# Avoid the file watcher touching llama.dll / GGUF files during a long CPU load.
+fileWatcherType = "poll"
+# Keep the websocket alive while a 7B CPU reply runs in a background thread.
+websocketPingInterval = 10
+
+[runner]
+fastReruns = true
