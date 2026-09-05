@@ -6,7 +6,12 @@ import html
 
 import streamlit as st
 
-from llm.runtime import RuntimeStatus, get_runtime
+from llm.runtime import (
+    RuntimeStatus,
+    build_retry_prompt,
+    get_runtime,
+    is_retryable_notice,
+)
 from ui.chat_store import (
     AUTO_TITLE_DONE_KEY,
     AWAITING_KEY,
@@ -19,6 +24,8 @@ from ui.chat_store import (
     format_elapsed_label,
     format_generated_in,
     format_message_stamp,
+    generating_wait_copy,
+    last_user_content,
 )
 from ui.library import (
     ConversationLibrary,
@@ -92,16 +99,30 @@ def render_chat_shell(
         _render_turn(message)
 
     runtime = get_runtime()
+    _offer_generate_again(thread, model_ready=model_ready)
     if runtime.is_generating:
-        elapsed = format_elapsed_label(runtime.generate_elapsed_seconds)
-        st.markdown(
-            f'<div class="lgm-generating">'
-            f'<span class="lgm-spinner" aria-hidden="true"></span>'
-            f"<span>Generating a reply… {html.escape(elapsed)}. "
-            "This can take one or two minutes on this computer.</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+        elapsed_s = runtime.generate_elapsed_seconds
+        elapsed = format_elapsed_label(elapsed_s)
+        wait = generating_wait_copy(elapsed_s)
+        text_col, stop_col = st.columns([0.82, 0.18], vertical_alignment="center")
+        with text_col:
+            st.markdown(
+                f'<div class="lgm-generating">'
+                f'<span class="lgm-spinner" aria-hidden="true"></span>'
+                f"<span>{html.escape(wait)} {html.escape(elapsed)}.</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        with stop_col:
+            stop_label = "Stopping…" if runtime.is_cancel_requested else "Stop"
+            if st.button(
+                stop_label,
+                key="lgm-stop-generate",
+                disabled=runtime.is_cancel_requested,
+                use_container_width=True,
+            ):
+                runtime.request_stop()
+                st.rerun()
     busy = runtime.is_generating or runtime.is_titling or not model_ready
     placeholder = (
         "Ask a question"
@@ -118,6 +139,27 @@ def render_chat_shell(
             created_at=stored["created_at"],
         )
         runtime.start_generate(prompt.strip())
+        st.session_state[AWAITING_KEY] = True
+        st.rerun()
+
+
+def _offer_generate_again(thread: list[dict], *, model_ready: bool) -> None:
+    """Offer a steered retry after a think-only or stopped reply."""
+    runtime = get_runtime()
+    if not model_ready or runtime.is_generating or runtime.is_titling:
+        return
+    if not thread:
+        return
+    last = thread[-1]
+    if last.get("role") != "assistant":
+        return
+    if not is_retryable_notice(str(last.get("content") or "")):
+        return
+    user_text = last_user_content(thread)
+    if not user_text:
+        return
+    if st.button("Generate again", key="lgm-generate-again"):
+        runtime.start_generate(build_retry_prompt(user_text))
         st.session_state[AWAITING_KEY] = True
         st.rerun()
 

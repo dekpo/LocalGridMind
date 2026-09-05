@@ -61,6 +61,12 @@
   margin: 0.4rem 0 0.8rem;
 }
 
+/* Compact Stop on the same row as the generating line. */
+div[data-testid="stHorizontalBlock"]:has(.lgm-generating) button {
+  min-height: 1.85rem;
+  padding: 0.2rem 0.65rem;
+}
+
 .lgm-spinner {
   width: 0.85rem;
   height: 0.85rem;

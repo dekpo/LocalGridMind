@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from config import N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
+    from config import CHAT_MAX_TOKENS, N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
 except ImportError:  # pytest uses the repo root on sys.path
-    from src.config import N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
+    from src.config import CHAT_MAX_TOKENS, N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
 
 LlamaFactory = Callable[..., Any]
 
@@ -26,12 +26,16 @@ SMOKE_PROMPT = (
     "to help analyze spreadsheets. Do not invent any numbers."
 )
 
-SMOKE_MAX_TOKENS = 512
 TITLE_MAX_TOKENS = 48
 
 EMPTY_REPLY_NOTICE = (
-    "The model produced only hidden reasoning for this message. "
-    "Try Generate again, or use a shorter test message."
+    "The model used all its time preparing and did not write an answer. "
+    "Try a shorter question, or generate again."
+)
+STOPPED_NOTICE = "Generation stopped."
+RETRY_STEER_PREFIX = (
+    "Answer now in plain English. Keep hidden reasoning very short. "
+    "Do not spend the whole reply thinking.\n\n"
 )
 
 
@@ -53,6 +57,16 @@ def strip_reasoning_tags(text: str) -> str:
     cleaned = _THINK_BLOCK.sub("", text)
     cleaned = _THINK_UNCLOSED.sub("", cleaned)
     return cleaned.strip()
+
+
+def build_retry_prompt(user_text: str) -> str:
+    """Steer a second attempt toward a visible answer, not more thinking."""
+    return f"{RETRY_STEER_PREFIX}{user_text.strip()}"
+
+
+def is_retryable_notice(content: str) -> bool:
+    """True when the last assistant turn may offer Generate again."""
+    return content in (EMPTY_REPLY_NOTICE, STOPPED_NOTICE)
 
 
 def explain_load_error(exc: BaseException) -> str:
@@ -136,6 +150,7 @@ class ModelRuntime:
         self._titling = False
         self._last_title: str | None = None
         self._title_error: str | None = None
+        self._cancel_generate = False
 
     @property
     def status(self) -> RuntimeStatus:
@@ -213,6 +228,21 @@ class ModelRuntime:
         with self._lock:
             return self._last_generate_seconds
 
+    @property
+    def is_cancel_requested(self) -> bool:
+        with self._lock:
+            return self._cancel_generate
+
+    def request_stop(self) -> None:
+        """Ask the in-flight completion to stop at the next token."""
+        with self._lock:
+            if self._generating:
+                self._cancel_generate = True
+
+    def _is_generate_cancelled(self) -> bool:
+        with self._lock:
+            return self._cancel_generate
+
     def load(self, model_path: Path) -> None:
         """Load a GGUF on this thread. Unloads any previous model first."""
         path = Path(model_path)
@@ -251,7 +281,7 @@ class ModelRuntime:
             self._generation += 1
             self._release_locked()
 
-    def generate(self, prompt: str, *, max_tokens: int = SMOKE_MAX_TOKENS) -> str:
+    def generate(self, prompt: str, *, max_tokens: int = CHAT_MAX_TOKENS) -> str:
         """Run one completion and return text safe to show to an analyst."""
         with self._lock:
             if self._status is not RuntimeStatus.READY or self._llama is None:
@@ -259,11 +289,18 @@ class ModelRuntime:
                     "Load a local model before generating a reply."
                 )
             llama = self._llama
-        raw = self._complete(llama, prompt, max_tokens=max_tokens)
+        raw = self._complete(
+            llama,
+            prompt,
+            max_tokens=max_tokens,
+            should_stop=self._is_generate_cancelled,
+        )
         cleaned = strip_reasoning_tags(raw)
+        if self._is_generate_cancelled():
+            return cleaned if cleaned else STOPPED_NOTICE
         return cleaned if cleaned else EMPTY_REPLY_NOTICE
 
-    def start_generate(self, prompt: str, *, max_tokens: int = SMOKE_MAX_TOKENS) -> None:
+    def start_generate(self, prompt: str, *, max_tokens: int = CHAT_MAX_TOKENS) -> None:
         """Begin a background completion so the Streamlit script can return."""
         with self._lock:
             if self._generating or self._titling:
@@ -273,6 +310,7 @@ class ModelRuntime:
                 self._last_reply = None
                 return
             self._generating = True
+            self._cancel_generate = False
             self._generate_started_at = time.monotonic()
             self._last_generate_seconds = None
             self._last_reply = None
@@ -429,6 +467,7 @@ class ModelRuntime:
         self._last_generate_seconds = None
         self._last_reply = None
         self._reply_error = None
+        self._cancel_generate = False
         self._titling = False
         self._last_title = None
         self._title_error = None
@@ -448,34 +487,107 @@ class ModelRuntime:
         gc.collect()
 
     @staticmethod
-    def _complete(llama: Any, prompt: str, *, max_tokens: int) -> str:
-        if hasattr(llama, "create_chat_completion"):
-            result = llama.create_chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=max_tokens,
-                temperature=0.2,
-            )
-            choices = result.get("choices") or []
-            if choices:
-                message = choices[0].get("message") or {}
-                content = message.get("content")
-                if content:
-                    return str(content)
-                text = choices[0].get("text")
-                if text:
-                    return str(text)
-            return ""
+    def _stopping_criteria(should_stop: Callable[[], bool] | None) -> Any:
+        if should_stop is None:
+            return None
 
-        result = llama(
-            prompt,
-            max_tokens=max_tokens,
-            temperature=0.2,
-            echo=False,
-        )
-        choices = result.get("choices") or []
-        if not choices:
+        def _criteria(_tokens: Any, _logits: Any) -> bool:
+            return bool(should_stop())
+
+        try:
+            from llama_cpp import StoppingCriteriaList
+
+            return StoppingCriteriaList([_criteria])
+        except ImportError:
+            return [_criteria]
+
+    @staticmethod
+    def _content_from_choice(choice: dict[str, Any]) -> str:
+        message = choice.get("message") or {}
+        content = message.get("content")
+        if content:
+            return str(content)
+        delta = choice.get("delta") or {}
+        delta_content = delta.get("content")
+        if delta_content:
+            return str(delta_content)
+        text = choice.get("text")
+        if text:
+            return str(text)
+        return ""
+
+    @classmethod
+    def _read_completion(
+        cls,
+        result: Any,
+        *,
+        should_stop: Callable[[], bool] | None,
+    ) -> str:
+        if result is None:
             return ""
-        return str(choices[0].get("text") or "")
+        if isinstance(result, dict):
+            choices = result.get("choices") or []
+            if not choices:
+                return ""
+            return cls._content_from_choice(choices[0])
+        parts: list[str] = []
+        try:
+            for chunk in result:
+                if should_stop is not None and should_stop():
+                    break
+                if not isinstance(chunk, dict):
+                    continue
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                piece = cls._content_from_choice(choices[0])
+                if piece:
+                    parts.append(piece)
+        finally:
+            close = getattr(result, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+        return "".join(parts)
+
+    @classmethod
+    def _complete(
+        cls,
+        llama: Any,
+        prompt: str,
+        *,
+        max_tokens: int,
+        should_stop: Callable[[], bool] | None = None,
+    ) -> str:
+        stop_arg = cls._stopping_criteria(should_stop)
+        if hasattr(llama, "create_chat_completion"):
+            kwargs: dict[str, Any] = {
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": 0.2,
+            }
+            if stop_arg is not None:
+                kwargs["stopping_criteria"] = stop_arg
+            try:
+                result = llama.create_chat_completion(stream=True, **kwargs)
+            except TypeError:
+                result = llama.create_chat_completion(**kwargs)
+            return cls._read_completion(result, should_stop=should_stop)
+
+        kwargs = {
+            "max_tokens": max_tokens,
+            "temperature": 0.2,
+            "echo": False,
+        }
+        if stop_arg is not None:
+            kwargs["stopping_criteria"] = stop_arg
+        try:
+            result = llama(prompt, stream=True, **kwargs)
+        except TypeError:
+            result = llama(prompt, **kwargs)
+        return cls._read_completion(result, should_stop=should_stop)
 
 
 _RUNTIME: ModelRuntime | None = None

@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from src.config import N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
+from src.config import CHAT_MAX_TOKENS, N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
 from src.llm.runtime import (
     EMPTY_REPLY_NOTICE,
+    RETRY_STEER_PREFIX,
+    STOPPED_NOTICE,
     ModelNotReadyError,
     ModelRuntime,
     RuntimeStatus,
+    build_retry_prompt,
     explain_load_error,
     get_runtime,
+    is_retryable_notice,
     reset_runtime_for_tests,
     strip_reasoning_tags,
 )
@@ -30,6 +35,7 @@ class FakeLlama:
         self.kwargs = kwargs
         self.closed = False
         self.prompt: str | None = None
+        self.complete_kwargs: dict[str, Any] = {}
         FakeLlama.instances.append(self)
 
     def create_chat_completion(
@@ -38,6 +44,7 @@ class FakeLlama:
         **kwargs: Any,
     ) -> dict[str, Any]:
         self.prompt = messages[0]["content"]
+        self.complete_kwargs = kwargs
         return {
             "choices": [
                 {
@@ -135,6 +142,7 @@ def test_generate_strips_think_tags(tmp_path: Path) -> None:
     assert "hidden scratch work" not in reply
     assert "The model is ready." in reply
     assert FakeLlama.instances[0].prompt == "ping"
+    assert FakeLlama.instances[0].complete_kwargs["max_tokens"] == CHAT_MAX_TOKENS == 1536
 
 
 def test_generate_before_load_raises() -> None:
@@ -203,6 +211,65 @@ def test_generate_empty_after_think_uses_notice(tmp_path: Path) -> None:
     runtime = ModelRuntime(llama_factory=ThinkOnlyFakeLlama)
     runtime.load(model)
     assert runtime.generate("ping") == EMPTY_REPLY_NOTICE
+    assert "used all its time preparing" in EMPTY_REPLY_NOTICE
+
+
+def _criteria_says_stop(criteria: Any) -> bool:
+    if criteria is None:
+        return False
+    if callable(criteria):
+        return bool(criteria([], None))
+    for item in criteria:
+        if callable(item) and item([], None):
+            return True
+    return False
+
+
+class CancellableFakeLlama(FakeLlama):
+    def create_chat_completion(
+        self,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        self.prompt = messages[0]["content"]
+        self.complete_kwargs = kwargs
+        criteria = kwargs.get("stopping_criteria")
+        for _ in range(200):
+            if _criteria_says_stop(criteria):
+                return {
+                    "choices": [{"message": {"content": "<think>partial only"}}]
+                }
+            time.sleep(0.01)
+        return {"choices": [{"message": {"content": "too late"}}]}
+
+
+def test_request_stop_returns_stopped_notice(tmp_path: Path) -> None:
+    import time
+
+    model = tmp_path / "demo.gguf"
+    runtime = ModelRuntime(llama_factory=CancellableFakeLlama)
+    runtime.load(model)
+    runtime.start_generate("long think")
+    for _ in range(50):
+        if runtime.is_generating:
+            break
+        time.sleep(0.01)
+    runtime.request_stop()
+    for _ in range(100):
+        if not runtime.is_generating and runtime.last_reply is not None:
+            break
+        time.sleep(0.01)
+    assert runtime.is_generating is False
+    assert runtime.last_reply == STOPPED_NOTICE
+    assert is_retryable_notice(STOPPED_NOTICE)
+    assert is_retryable_notice(EMPTY_REPLY_NOTICE)
+
+
+def test_build_retry_prompt_steers_toward_a_visible_answer() -> None:
+    steered = build_retry_prompt("How do I meditate?")
+    assert steered.startswith(RETRY_STEER_PREFIX)
+    assert steered.endswith("How do I meditate?")
+    assert "Keep hidden reasoning very short" in steered
 
 
 def test_start_generate_stores_reply(tmp_path: Path) -> None:

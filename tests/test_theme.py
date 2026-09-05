@@ -9,4 +9,5 @@ def test_stylesheet_is_present_and_readable() -> None:
     assert ":root" in text
     assert "lgm-bubble" in text
     assert "lgm-spinner" in text
+    assert ":has(.lgm-generating)" in text
     assert "#lgm-model-ready" in text

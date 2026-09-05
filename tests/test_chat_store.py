@@ -6,6 +6,10 @@ from datetime import datetime, timezone
 
 from src.ui.chat_store import (
     RECENT_TITLE_MAX_CHARS,
+    WAIT_COPY_AFTER_300,
+    WAIT_COPY_UNDER_90,
+    WAIT_COPY_UNDER_180,
+    WAIT_COPY_UNDER_300,
     add_message,
     empty_thread,
     format_elapsed_label,
@@ -14,6 +18,8 @@ from src.ui.chat_store import (
     format_recent_button_label,
     format_recent_stamp,
     format_recent_title,
+    generating_wait_copy,
+    last_user_content,
 )
 
 
@@ -92,3 +98,23 @@ def test_assistant_turn_appends_after_user() -> None:
     add_message(thread, "user", "Hello")
     add_message(thread, "assistant", "Ready to help.")
     assert [item["role"] for item in thread] == ["user", "assistant"]
+
+
+def test_generating_wait_copy_changes_with_elapsed_time() -> None:
+    assert generating_wait_copy(0) == WAIT_COPY_UNDER_90
+    assert generating_wait_copy(89) == WAIT_COPY_UNDER_90
+    assert generating_wait_copy(90) == WAIT_COPY_UNDER_180
+    assert generating_wait_copy(179) == WAIT_COPY_UNDER_180
+    assert generating_wait_copy(180) == WAIT_COPY_UNDER_300
+    assert generating_wait_copy(299) == WAIT_COPY_UNDER_300
+    assert generating_wait_copy(300) == WAIT_COPY_AFTER_300
+    assert "not sleeping" in WAIT_COPY_AFTER_300
+
+
+def test_last_user_content_returns_latest_user_turn() -> None:
+    thread = empty_thread()
+    assert last_user_content(thread) is None
+    add_message(thread, "user", "first")
+    add_message(thread, "assistant", "ok")
+    add_message(thread, "user", "second")
+    assert last_user_content(thread) == "second"
