@@ -1,0 +1,52 @@
+/* LocalGridMind theme.
+ * Edit this file. It is injected by src/ui/theme.py (apply_theme).
+ * Pattern: Reporting-Tools-RAG assets/css/style.css + local_css().
+ * Do not put layout experiments in Python. Keep Streamlit widgets default
+ * unless a selector here is intentional.
+ */
+
+:root {
+  --lgm-user-bubble: #ececec;
+  --lgm-text: #1a1a1a;
+  --lgm-muted: #8a8a8a;
+}
+
+/* Chat turns — functional layout (user right, assistant left). */
+.lgm-turn {
+  margin: 0.85rem 0;
+}
+
+.lgm-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.lgm-bubble {
+  background: var(--lgm-user-bubble);
+  border-radius: 1.15rem;
+  padding: 0.65rem 1rem;
+  max-width: min(72%, 40rem);
+  color: var(--lgm-text);
+  line-height: 1.45;
+  word-wrap: break-word;
+}
+
+.lgm-stamp {
+  font-size: 0.75rem;
+  color: var(--lgm-muted);
+  margin-top: 0.28rem;
+  padding-right: 0.4rem;
+}
+
+.lgm-assistant {
+  max-width: min(80%, 48rem);
+  padding: 0.15rem 0.1rem;
+  line-height: 1.5;
+  color: var(--lgm-text);
+}
+
+[data-testid="stChatMessageAvatar"],
+[data-testid="stChatAvatar"] {
+  display: none !important;
+}
