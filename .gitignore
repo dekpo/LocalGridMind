@@ -35,6 +35,13 @@ data/uploads/*
 outputs/*
 !outputs/.gitkeep
 
+# Local conversation library (SQLite)
+data/chats/*
+!data/chats/.gitkeep
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
 # Packaging and build artifacts
 build/
 dist/
