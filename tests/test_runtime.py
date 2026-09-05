@@ -219,6 +219,34 @@ def test_start_generate_stores_reply(tmp_path: Path) -> None:
     assert runtime.is_generating is False
     assert runtime.last_reply is not None
     assert "The model is ready." in runtime.last_reply
+    assert runtime.last_generate_seconds is not None
+    assert runtime.last_generate_seconds >= 0.0
+
+
+def test_start_title_generate_does_not_replace_last_reply(tmp_path: Path) -> None:
+    model = tmp_path / "demo.gguf"
+    runtime = ModelRuntime(llama_factory=FakeLlama)
+    runtime.load(model)
+    runtime.start_generate("ping")
+    import time
+
+    for _ in range(50):
+        if runtime.last_reply is not None:
+            break
+        time.sleep(0.01)
+    chat_reply = runtime.last_reply
+
+    runtime.start_title_generate("title this")
+    for _ in range(50):
+        if runtime.last_title is not None:
+            break
+        time.sleep(0.01)
+
+    assert runtime.is_titling is False
+    assert runtime.last_title is not None
+    assert "<think>" not in runtime.last_title
+    assert runtime.last_reply == chat_reply
+    assert FakeLlama.instances[0].prompt == "title this"
 
 
 def test_start_load_is_lazy_until_called(tmp_path: Path) -> None:

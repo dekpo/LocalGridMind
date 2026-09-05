@@ -5,6 +5,21 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 3 — Conversation library (2026-09-05)
+
+Sidebar Recents persist every thread in a local SQLite file
+(`data/chats/library.sqlite`, stdlib `sqlite3`). New chat creates an
+empty conversation. Clicking a recent reopens its messages after a
+restart. After the first exchange, the title is a short heuristic from
+the first user line; if a model is Ready, a hidden completion may
+refine it. Reasoning tags are stripped. Tests use `tmp_path`.
+
+Assistant replies keep the generation duration under the answer
+(same clock as the live “Generating a reply…” line). Recents can
+delete the selected conversation (official `st.popover`, no extra
+component). Streamlit theme primary is a dark gray so selection and
+input focus no longer use error-red.
+
 ### Phase 2 — Conversational shell (2026-09-05)
 
 ChatGPT / Gemini-like thread: user bubbles on the right with a timestamp,

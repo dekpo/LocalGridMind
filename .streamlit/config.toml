@@ -11,3 +11,12 @@ websocketPingInterval = 10
 
 [runner]
 fastReruns = true
+
+# Streamlit's default primaryColor is #FF4B4B (error/danger red).
+# Use a dark gray for selection, primary buttons, and input focus.
+# Reserve red for real errors only (st.error, load failures).
+[theme]
+primaryColor = "#3d3d3d"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f4f4"
+textColor = "#1a1a1a"

@@ -8,3 +8,5 @@ def test_stylesheet_is_present_and_readable() -> None:
     text = STYLESHEET_PATH.read_text(encoding="utf-8")
     assert ":root" in text
     assert "lgm-bubble" in text
+    assert "lgm-spinner" in text
+    assert "#lgm-model-ready" in text

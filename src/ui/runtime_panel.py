@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
 import streamlit as st
@@ -67,7 +68,10 @@ def _draw_status(selected_path: Path | None) -> None:
 
     if status is RuntimeStatus.READY:
         name = loaded.stem if loaded is not None else "model"
-        st.success(f"{label}: {name}")
+        st.markdown(
+            f'<div id="lgm-model-ready">{html.escape(name)}</div>',
+            unsafe_allow_html=True,
+        )
         if selected_path is not None and loaded is not None and selected_path != loaded:
             st.info("A different model is selected. Load it to switch.")
         return
@@ -77,7 +81,7 @@ def _draw_status(selected_path: Path | None) -> None:
         st.error(f"{label}: {detail}")
         return
 
-    st.info(f"{label}: no model in memory.")
+    st.warning("No model in memory.")
 
 
 def _format_elapsed(seconds: float) -> str:

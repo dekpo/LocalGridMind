@@ -5,14 +5,14 @@ systems, extracts data and spreadsheet logic, explains it, and can emit
 a simpler workbook. A local model drives the work. Users never touch
 Python or a terminal.
 
-This repository has completed **phase 1 (local GGUF runtime)**.
+This repository has completed **phase 3 (conversation library)**.
 Read `PRODUCT.md` for intent, feasibility, and limits. See
 `CHANGELOG.md` for what landed and `ROADMAP.md` for the phase plan.
 
-The next public step is a ChatGPT-like conversation shell (fixed
-input, scrollable history). Workbook loading comes after that shell
-is usable. The local model remains a hidden generator of analysis
-code and Excel formula text. It must not invent numeric answers.
+The next public step is workbook intelligence (folder pack, schema,
+stored formulas, external links). The local model remains a hidden
+generator of analysis code and Excel formula text. It must not invent
+numeric answers.
 
 ## Requirements (developers only)
 
@@ -39,6 +39,7 @@ LocalGridMind/
 │   └── ui/
 ├── models/          # place .gguf files here; binaries are not committed
 ├── data/uploads/
+├── data/chats/      # local SQLite library (gitignored)
 ├── outputs/
 └── tests/
 ```

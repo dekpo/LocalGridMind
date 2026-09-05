@@ -27,6 +27,7 @@ SMOKE_PROMPT = (
 )
 
 SMOKE_MAX_TOKENS = 512
+TITLE_MAX_TOKENS = 48
 
 EMPTY_REPLY_NOTICE = (
     "The model produced only hidden reasoning for this message. "
@@ -129,8 +130,12 @@ class ModelRuntime:
         self._load_started_at: float | None = None
         self._generating = False
         self._generate_started_at: float | None = None
+        self._last_generate_seconds: float | None = None
         self._last_reply: str | None = None
         self._reply_error: str | None = None
+        self._titling = False
+        self._last_title: str | None = None
+        self._title_error: str | None = None
 
     @property
     def status(self) -> RuntimeStatus:
@@ -170,6 +175,11 @@ class ModelRuntime:
             return self._generating
 
     @property
+    def is_titling(self) -> bool:
+        with self._lock:
+            return self._titling
+
+    @property
     def last_reply(self) -> str | None:
         with self._lock:
             return self._last_reply
@@ -180,12 +190,28 @@ class ModelRuntime:
             return self._reply_error
 
     @property
+    def last_title(self) -> str | None:
+        with self._lock:
+            return self._last_title
+
+    @property
+    def title_error(self) -> str | None:
+        with self._lock:
+            return self._title_error
+
+    @property
     def generate_elapsed_seconds(self) -> float:
         with self._lock:
             started = self._generate_started_at
         if started is None:
             return 0.0
         return max(0.0, time.monotonic() - started)
+
+    @property
+    def last_generate_seconds(self) -> float | None:
+        """Elapsed seconds of the last finished generate, or None."""
+        with self._lock:
+            return self._last_generate_seconds
 
     def load(self, model_path: Path) -> None:
         """Load a GGUF on this thread. Unloads any previous model first."""
@@ -240,7 +266,7 @@ class ModelRuntime:
     def start_generate(self, prompt: str, *, max_tokens: int = SMOKE_MAX_TOKENS) -> None:
         """Begin a background completion so the Streamlit script can return."""
         with self._lock:
-            if self._generating:
+            if self._generating or self._titling:
                 return
             if self._status is not RuntimeStatus.READY or self._llama is None:
                 self._reply_error = "Load a local model before generating a reply."
@@ -248,6 +274,7 @@ class ModelRuntime:
                 return
             self._generating = True
             self._generate_started_at = time.monotonic()
+            self._last_generate_seconds = None
             self._last_reply = None
             self._reply_error = None
         worker = threading.Thread(
@@ -258,21 +285,72 @@ class ModelRuntime:
         )
         worker.start()
 
+    def start_title_generate(
+        self, prompt: str, *, max_tokens: int = TITLE_MAX_TOKENS
+    ) -> None:
+        """Hidden title completion. Does not replace last_reply or chat status."""
+        with self._lock:
+            if self._generating or self._titling:
+                return
+            if self._status is not RuntimeStatus.READY or self._llama is None:
+                self._title_error = "Load a local model before generating a title."
+                self._last_title = None
+                return
+            self._titling = True
+            self._last_title = None
+            self._title_error = None
+        worker = threading.Thread(
+            target=self._title_worker,
+            args=(prompt, max_tokens),
+            name="localgridmind-gguf-title",
+            daemon=True,
+        )
+        worker.start()
+
     def _generate_worker(self, prompt: str, max_tokens: int) -> None:
         try:
             reply = self.generate(prompt, max_tokens=max_tokens)
         except Exception as exc:
             with self._lock:
-                self._generating = False
-                self._generate_started_at = None
-                self._last_reply = None
-                self._reply_error = str(exc) or exc.__class__.__name__
+                self._finish_generate_locked(
+                    reply=None,
+                    error=str(exc) or exc.__class__.__name__,
+                )
             return
         with self._lock:
-            self._generating = False
-            self._generate_started_at = None
-            self._last_reply = reply
-            self._reply_error = None
+            self._finish_generate_locked(reply=reply, error=None)
+
+    def _finish_generate_locked(
+        self, *, reply: str | None, error: str | None
+    ) -> None:
+        started = self._generate_started_at
+        if started is not None:
+            self._last_generate_seconds = max(0.0, time.monotonic() - started)
+        self._generating = False
+        self._generate_started_at = None
+        self._last_reply = reply
+        self._reply_error = error
+
+    def _title_worker(self, prompt: str, max_tokens: int) -> None:
+        try:
+            with self._lock:
+                if self._status is not RuntimeStatus.READY or self._llama is None:
+                    raise ModelNotReadyError(
+                        "Load a local model before generating a title."
+                    )
+                llama = self._llama
+            raw = self._complete(llama, prompt, max_tokens=max_tokens)
+            cleaned = strip_reasoning_tags(raw)
+        except Exception as exc:
+            with self._lock:
+                self._titling = False
+                self._last_title = None
+                self._title_error = str(exc) or exc.__class__.__name__
+            return
+        with self._lock:
+            self._titling = False
+            self._last_title = cleaned
+            self._title_error = None
 
     def _build_llama(self, path: Path, generation: int) -> None:
         def on_progress(fraction: float) -> None:
@@ -348,8 +426,12 @@ class ModelRuntime:
         self._load_started_at = None
         self._generating = False
         self._generate_started_at = None
+        self._last_generate_seconds = None
         self._last_reply = None
         self._reply_error = None
+        self._titling = False
+        self._last_title = None
+        self._title_error = None
         self._close_llama(llama)
 
     @staticmethod

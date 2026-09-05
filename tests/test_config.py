@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from src.config import list_available_models
+from src.config import CHATS_DB_PATH, CHATS_DIR, PROJECT_ROOT, list_available_models
 
 
 def test_list_available_models_ignores_non_gguf(tmp_path: Path) -> None:
@@ -20,3 +20,8 @@ def test_list_available_models_ignores_non_gguf(tmp_path: Path) -> None:
 def test_list_available_models_missing_directory(tmp_path: Path) -> None:
     missing = tmp_path / "does-not-exist"
     assert list_available_models(missing) == []
+
+
+def test_chats_db_path_is_under_data_chats() -> None:
+    assert CHATS_DIR == PROJECT_ROOT / "data" / "chats"
+    assert CHATS_DB_PATH == CHATS_DIR / "library.sqlite"
