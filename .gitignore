@@ -47,6 +47,8 @@ dist/
 .cursor/
 AGENTS.md
 PROJECT_STATUS.md
+LESSONS.md
+*_LESSONS.md
 *_HANDOFF.md
 
 # IDE and OS noise

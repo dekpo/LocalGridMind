@@ -1,4 +1,4 @@
-"""Minimal Streamlit entry point: model discovery and English UI shell."""
+"""Minimal Streamlit entry point: local GGUF runtime and English UI shell."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from config import (
     get_model_labels,
     resolve_model_by_label,
 )
+from ui.runtime_panel import render_model_sidebar, render_smoke_test
 
 st.set_page_config(page_title="LocalGridMind", layout="wide")
 ensure_runtime_directories()
@@ -22,6 +23,7 @@ st.caption(
 )
 
 model_labels = get_model_labels()
+selected_model = None
 
 with st.sidebar:
     st.header("Local model")
@@ -30,15 +32,21 @@ with st.sidebar:
         selected_label = st.selectbox("Active GGUF model", options=model_labels)
         selected_model = resolve_model_by_label(selected_label)
         if selected_model is not None:
-            st.success(f"Ready: {selected_model.name}")
             st.code(str(selected_model.path), language="text")
+        render_model_sidebar(selected_model.path if selected_model else None)
     else:
         st.warning(
             "No `.gguf` file found in `models/`. "
             "Download a quantized model and drop it there, then refresh."
         )
+        render_model_sidebar(None)
 
 st.info(
     "File loading, formula extraction, and cleaner exports land in later phases. "
-    "This screen only confirms that LocalGridMind can see your local models."
+    "This screen confirms that a local model can load and reply."
 )
+
+if selected_model is not None:
+    render_smoke_test(selected_model.path)
+else:
+    st.caption("Add a local model file to run the short readiness check.")

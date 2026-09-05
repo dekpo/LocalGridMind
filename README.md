@@ -5,8 +5,14 @@ systems, extracts data and spreadsheet logic, explains it, and can emit
 a simpler workbook. A local model drives the work. Users never touch
 Python or a terminal.
 
-This repository is in **phase 0 (bootstrap)**. Read `PRODUCT.md` for
-intent, feasibility, and limits.
+This repository has completed **phase 1 (local GGUF runtime)**.
+Read `PRODUCT.md` for intent, feasibility, and limits. See
+`CHANGELOG.md` for what landed and `ROADMAP.md` for the phase plan.
+
+The next public step is a ChatGPT-like conversation shell (fixed
+input, scrollable history). Workbook loading comes after that shell
+is usable. The local model remains a hidden generator of analysis
+code and Excel formula text. It must not invent numeric answers.
 
 ## Requirements (developers only)
 
@@ -65,7 +71,19 @@ streamlit run src/app.py
 ```
 
 The prompt should show `(.venv)` after `activate.bat`.
-Place a `.gguf` file in `models/` and refresh the app.
+Place a `.gguf` file in `models/`. In the sidebar, choose it and click
+**Load model**. Wait until the status is Ready (first load can take
+several minutes on a 24 GB CPU laptop). Then send a short test message.
+
+To stop Streamlit on Windows if Ctrl+C fails, use another CMD window:
+
+```bat
+taskkill /F /IM streamlit.exe
+```
+
+If load fails with Windows error 4551, Windows Security blocked
+`llama.dll`. Allow that file (or turn off Smart App Control), then
+restart the app.
 
 If the `llama-cpp-python` CPU wheel fails on Python 3.13, install
 Python 3.11 from python.org, then recreate the venv with that
