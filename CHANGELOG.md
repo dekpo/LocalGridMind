@@ -5,6 +5,18 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 2 — Conversational shell (2026-09-05)
+
+ChatGPT / Gemini-like thread: user bubbles on the right with a timestamp,
+assistant text on the left, no avatars, `st.chat_input` pinned at the
+bottom. New chat clears the in-memory thread. Model load stays in a
+sidebar expander.
+
+Load / generate status polls with a full script rerun (`sleep` +
+`st.rerun()`). Streamlit `st.fragment` status panels left ghost Ready +
+Loading boxes and could freeze the percent until a browser refresh.
+The GGUF worker itself was already correct.
+
 ### Phase 1 — Local GGUF runtime (2026-09-05)
 
 Analysts can pick a `.gguf` file from `models/`, load one model at a

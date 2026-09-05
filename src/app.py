@@ -1,52 +1,58 @@
-"""Minimal Streamlit entry point: local GGUF runtime and English UI shell."""
+"""Streamlit entry: local model controls and a ChatGPT-like chat shell."""
 
 from __future__ import annotations
+
+import time
 
 import streamlit as st
 
 from config import (
-    MODELS_DIR,
     N_THREADS,
     ensure_runtime_directories,
     get_model_labels,
     resolve_model_by_label,
 )
-from ui.runtime_panel import render_model_sidebar, render_smoke_test
+from llm.runtime import RuntimeStatus, get_runtime
+from ui.chat_panel import clear_thread, render_chat_shell
+from ui.runtime_panel import render_model_sidebar
+from ui.theme import apply_theme
 
 st.set_page_config(page_title="LocalGridMind", layout="wide")
 ensure_runtime_directories()
+apply_theme()
 
 st.title("LocalGridMind")
 st.caption(
     "Private desktop analysis for complex Excel and CSV workbooks. "
-    "Extract data and spreadsheet logic without sending files off this machine."
+    "Ask in the thread below. Files stay on this machine."
 )
 
 model_labels = get_model_labels()
 selected_model = None
+runtime = get_runtime()
 
 with st.sidebar:
-    st.header("Local model")
-    st.caption(f"CPU threads locked to {N_THREADS}. Models folder: `{MODELS_DIR}`.")
-    if model_labels:
-        selected_label = st.selectbox("Active GGUF model", options=model_labels)
-        selected_model = resolve_model_by_label(selected_label)
-        if selected_model is not None:
-            st.code(str(selected_model.path), language="text")
-        render_model_sidebar(selected_model.path if selected_model else None)
-    else:
-        st.warning(
-            "No `.gguf` file found in `models/`. "
-            "Download a quantized model and drop it there, then refresh."
-        )
-        render_model_sidebar(None)
+    if st.button("New chat", use_container_width=True, disabled=runtime.is_generating):
+        clear_thread()
+        st.rerun()
 
-st.info(
-    "File loading, formula extraction, and cleaner exports land in later phases. "
-    "This screen confirms that a local model can load and reply."
-)
+    with st.expander("Local model", expanded=True):
+        st.caption(f"CPU threads locked to {N_THREADS}.")
+        if model_labels:
+            selected_label = st.selectbox("Active GGUF model", options=model_labels)
+            selected_model = resolve_model_by_label(selected_label)
+            render_model_sidebar(selected_model.path if selected_model else None)
+        else:
+            st.warning(
+                "No local model file found. Place one in the models folder, then refresh."
+            )
+            render_model_sidebar(None)
 
-if selected_model is not None:
-    render_smoke_test(selected_model.path)
-else:
-    st.caption("Add a local model file to run the short readiness check.")
+model_ready = selected_model is not None and runtime.status is RuntimeStatus.READY
+render_chat_shell(model_ready=model_ready)
+
+# Full-script poll. Fragments on Windows leave ghost status boxes and can
+# freeze the percent until a manual refresh. One rerun per second is enough.
+if runtime.status is RuntimeStatus.LOADING or runtime.is_generating:
+    time.sleep(1.0)
+    st.rerun()
