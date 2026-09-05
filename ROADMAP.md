@@ -11,7 +11,7 @@ text. It must not invent numeric answers.
 | --- | --- | --- |
 | 0 Bootstrap | Done | Repo, venv, GGUF discovery, Streamlit shell |
 | 1 Local GGUF runtime | Done | Load / unload one CPU model, readiness check |
-| 2 Conversational shell | Next | Fixed input, scrollable history, user right / assistant left, no avatars, timestamps, New chat |
+| 2 Conversational shell | Implemented | Fixed input, scrollable history, user right / assistant left, no avatars, timestamps, New chat |
 | 3 Conversation library | Planned | Recents list, switch threads, local persist, auto-titles |
 | 4 Workbook intelligence | Planned | Folder pack, schema, stored formulas, external-link graph |
 | 5 Hidden interpreter | Planned | Restricted execution of generated Pandas; users never see Python |
