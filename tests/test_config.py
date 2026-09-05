@@ -2,7 +2,13 @@
 
 from pathlib import Path
 
-from src.config import CHATS_DB_PATH, CHATS_DIR, PROJECT_ROOT, list_available_models
+from src.config import (
+    CHAT_MAX_TOKENS,
+    CHATS_DB_PATH,
+    CHATS_DIR,
+    PROJECT_ROOT,
+    list_available_models,
+)
 
 
 def test_list_available_models_ignores_non_gguf(tmp_path: Path) -> None:
@@ -25,3 +31,7 @@ def test_list_available_models_missing_directory(tmp_path: Path) -> None:
 def test_chats_db_path_is_under_data_chats() -> None:
     assert CHATS_DIR == PROJECT_ROOT / "data" / "chats"
     assert CHATS_DB_PATH == CHATS_DIR / "library.sqlite"
+
+
+def test_chat_token_budget_leaves_room_for_a_visible_reply() -> None:
+    assert CHAT_MAX_TOKENS == 1536

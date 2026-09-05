@@ -5,6 +5,16 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 4 — Generate wait UX (2026-09-06)
+
+Chat replies use a 1536-token budget so a reasoning model can still
+write a visible answer after hidden `<think>` text. A Stop button sits
+on the generating line and aborts the completion. Wait copy changes
+with elapsed time (a single light line after five minutes). If the
+model still produces only hidden reasoning, the notice says so and
+**Generate again** retries with a short “answer now” steer. Tests mock
+`Llama` and do not ship `.gguf` fixtures.
+
 ### Phase 3 — Conversation library (2026-09-05)
 
 Sidebar Recents persist every thread in a local SQLite file

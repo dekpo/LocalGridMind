@@ -12,6 +12,9 @@ N_THREADS = 4
 N_GPU_LAYERS = 0
 N_CTX = 4096
 N_BATCH = 128
+# Chat completion budget. 512 left reasoning models with no visible
+# answer on this CPU (~2 min). 1536 leaves room for a reply (~6 min).
+CHAT_MAX_TOKENS = 1536
 
 GGUF_EXTENSION = ".gguf"
 

@@ -98,6 +98,38 @@ def format_generated_in(seconds: float | int | None) -> str:
     return f"Generated in {minutes} min {rest:02d}s"
 
 
+WAIT_COPY_UNDER_90 = "Preparing a reply. This often takes one to three minutes."
+WAIT_COPY_UNDER_180 = (
+    "Still working. Longer questions take more time. You can wait or stop."
+)
+WAIT_COPY_UNDER_300 = "Still preparing an answer. You can wait or stop."
+WAIT_COPY_AFTER_300 = (
+    "This is taking longer than usual — not sleeping, still working. "
+    "You can keep waiting or stop."
+)
+
+
+def generating_wait_copy(seconds: float | int | None) -> str:
+    """Honest wait text that changes as a long generate continues."""
+    elapsed = 0.0 if seconds is None else max(0.0, float(seconds))
+    if elapsed < 90:
+        return WAIT_COPY_UNDER_90
+    if elapsed < 180:
+        return WAIT_COPY_UNDER_180
+    if elapsed < 300:
+        return WAIT_COPY_UNDER_300
+    return WAIT_COPY_AFTER_300
+
+
+def last_user_content(thread: list[dict[str, Any]]) -> str | None:
+    """Most recent user turn, or None."""
+    for message in reversed(thread):
+        if message.get("role") == "user":
+            text = str(message.get("content") or "").strip()
+            return text or None
+    return None
+
+
 def add_message(
     thread: list[dict[str, Any]],
     role: Role,

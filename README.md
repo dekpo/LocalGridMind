@@ -5,14 +5,15 @@ systems, extracts data and spreadsheet logic, explains it, and can emit
 a simpler workbook. A local model drives the work. Users never touch
 Python or a terminal.
 
-This repository has completed **phase 3 (conversation library)**.
-Read `PRODUCT.md` for intent, feasibility, and limits. See
-`CHANGELOG.md` for what landed and `ROADMAP.md` for the phase plan.
+This repository has completed **phase 3 (conversation library)** and is
+adding **phase 4 (generate wait UX)**. Read `PRODUCT.md` for intent,
+feasibility, and limits. See `CHANGELOG.md` for what landed and
+`ROADMAP.md` for the phase plan.
 
-The next public step is workbook intelligence (folder pack, schema,
-stored formulas, external links). The local model remains a hidden
-generator of analysis code and Excel formula text. It must not invent
-numeric answers.
+The next public step after this wait-UX work is workbook intelligence
+(folder pack, schema, stored formulas, external links). The local model
+remains a hidden generator of analysis code and Excel formula text. It
+must not invent numeric answers.
 
 ## Requirements (developers only)
 
