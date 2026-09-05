@@ -143,6 +143,7 @@ def test_generate_strips_think_tags(tmp_path: Path) -> None:
     assert "The model is ready." in reply
     assert FakeLlama.instances[0].prompt == "ping"
     assert FakeLlama.instances[0].complete_kwargs["max_tokens"] == CHAT_MAX_TOKENS == 1536
+    assert "stopping_criteria" not in FakeLlama.instances[0].complete_kwargs
 
 
 def test_generate_before_load_raises() -> None:
@@ -214,32 +215,22 @@ def test_generate_empty_after_think_uses_notice(tmp_path: Path) -> None:
     assert "used all its time preparing" in EMPTY_REPLY_NOTICE
 
 
-def _criteria_says_stop(criteria: Any) -> bool:
-    if criteria is None:
-        return False
-    if callable(criteria):
-        return bool(criteria([], None))
-    for item in criteria:
-        if callable(item) and item([], None):
-            return True
-    return False
-
-
 class CancellableFakeLlama(FakeLlama):
     def create_chat_completion(
         self,
         messages: list[dict[str, str]],
         **kwargs: Any,
-    ) -> dict[str, Any]:
+    ) -> Any:
         self.prompt = messages[0]["content"]
         self.complete_kwargs = kwargs
-        criteria = kwargs.get("stopping_criteria")
-        for _ in range(200):
-            if _criteria_says_stop(criteria):
-                return {
-                    "choices": [{"message": {"content": "<think>partial only"}}]
-                }
-            time.sleep(0.01)
+
+        def _stream() -> Any:
+            for _ in range(200):
+                time.sleep(0.01)
+                yield {"choices": [{"delta": {"content": ""}}]}
+
+        if kwargs.get("stream"):
+            return _stream()
         return {"choices": [{"message": {"content": "too late"}}]}
 
 

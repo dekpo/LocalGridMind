@@ -561,31 +561,35 @@ class ModelRuntime:
         max_tokens: int,
         should_stop: Callable[[], bool] | None = None,
     ) -> str:
-        stop_arg = cls._stopping_criteria(should_stop)
+        # create_chat_completion has no stopping_criteria (llama-cpp-python
+        # 0.3.x). Abort by streaming and closing the iterator on Stop.
         if hasattr(llama, "create_chat_completion"):
             kwargs: dict[str, Any] = {
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": max_tokens,
                 "temperature": 0.2,
+                "stream": True,
             }
-            if stop_arg is not None:
-                kwargs["stopping_criteria"] = stop_arg
             try:
-                result = llama.create_chat_completion(stream=True, **kwargs)
+                result = llama.create_chat_completion(**kwargs)
             except TypeError:
+                kwargs.pop("stream", None)
                 result = llama.create_chat_completion(**kwargs)
             return cls._read_completion(result, should_stop=should_stop)
 
+        stop_arg = cls._stopping_criteria(should_stop)
         kwargs = {
             "max_tokens": max_tokens,
             "temperature": 0.2,
             "echo": False,
+            "stream": True,
         }
         if stop_arg is not None:
             kwargs["stopping_criteria"] = stop_arg
         try:
-            result = llama(prompt, stream=True, **kwargs)
+            result = llama(prompt, **kwargs)
         except TypeError:
+            kwargs.pop("stream", None)
             result = llama(prompt, **kwargs)
         return cls._read_completion(result, should_stop=should_stop)
 
