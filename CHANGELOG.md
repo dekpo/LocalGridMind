@@ -5,6 +5,15 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 5 — Reasoning time (2026-09-06)
+
+The Local model expander lists **Selected model** (was Active GGUF
+model) and a **Reasoning time** select (`~2 min` … `~10 min`). Those
+labels map to a hidden token budget (512 … 2560; default `~6 min` /
+1536). Analysts never see the word “token”. The choice lives in
+session state and is disabled while the model is loading, generating,
+or titling. Tests cover the map and default; no `.gguf` fixtures.
+
 ### Phase 4 — Generate wait UX (2026-09-06)
 
 Chat replies use a 1536-token budget so a reasoning model can still

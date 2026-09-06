@@ -6,8 +6,13 @@ from src.config import (
     CHAT_MAX_TOKENS,
     CHATS_DB_PATH,
     CHATS_DIR,
+    DEFAULT_REASONING_TIME_LABEL,
+    N_CTX,
     PROJECT_ROOT,
+    REASONING_TIME_LABELS,
+    REASONING_TIME_TOKENS,
     list_available_models,
+    resolve_reasoning_tokens,
 )
 
 
@@ -35,3 +40,25 @@ def test_chats_db_path_is_under_data_chats() -> None:
 
 def test_chat_token_budget_leaves_room_for_a_visible_reply() -> None:
     assert CHAT_MAX_TOKENS == 1536
+
+
+def test_reasoning_time_labels_map_to_hidden_token_budgets() -> None:
+    assert DEFAULT_REASONING_TIME_LABEL == "~6 min"
+    assert REASONING_TIME_LABELS == (
+        "~2 min",
+        "~4 min",
+        "~6 min",
+        "~8 min",
+        "~10 min",
+    )
+    assert resolve_reasoning_tokens("~2 min") == 512
+    assert resolve_reasoning_tokens("~4 min") == 1024
+    assert resolve_reasoning_tokens("~6 min") == 1536
+    assert resolve_reasoning_tokens("~8 min") == 2048
+    assert resolve_reasoning_tokens("~10 min") == 2560
+    assert resolve_reasoning_tokens(DEFAULT_REASONING_TIME_LABEL) == CHAT_MAX_TOKENS
+    assert max(REASONING_TIME_TOKENS.values()) < N_CTX
+
+
+def test_unknown_reasoning_time_label_uses_default_budget() -> None:
+    assert resolve_reasoning_tokens("not a label") == CHAT_MAX_TOKENS

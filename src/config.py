@@ -12,9 +12,26 @@ N_THREADS = 4
 N_GPU_LAYERS = 0
 N_CTX = 4096
 N_BATCH = 128
+# Sidebar labels. Hidden token budgets stay under N_CTX (prompt + reply).
+# Do not show these numbers or the word "token" in the UI.
+REASONING_TIME_LABELS: tuple[str, ...] = (
+    "~2 min",
+    "~4 min",
+    "~6 min",
+    "~8 min",
+    "~10 min",
+)
+REASONING_TIME_TOKENS: dict[str, int] = {
+    "~2 min": 512,
+    "~4 min": 1024,
+    "~6 min": 1536,
+    "~8 min": 2048,
+    "~10 min": 2560,
+}
+DEFAULT_REASONING_TIME_LABEL = "~6 min"
 # Chat completion budget. 512 left reasoning models with no visible
 # answer on this CPU (~2 min). 1536 leaves room for a reply (~6 min).
-CHAT_MAX_TOKENS = 1536
+CHAT_MAX_TOKENS = REASONING_TIME_TOKENS[DEFAULT_REASONING_TIME_LABEL]
 
 GGUF_EXTENSION = ".gguf"
 
@@ -99,3 +116,8 @@ def resolve_model_by_label(label: str) -> ModelInfo | None:
         if model.display_label == label:
             return model
     return None
+
+
+def resolve_reasoning_tokens(label: str) -> int:
+    """Map a Reasoning time label to the hidden chat completion budget."""
+    return REASONING_TIME_TOKENS.get(label, CHAT_MAX_TOKENS)

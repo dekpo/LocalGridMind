@@ -8,10 +8,13 @@ import streamlit as st
 
 from config import (
     CHATS_DB_PATH,
+    DEFAULT_REASONING_TIME_LABEL,
     N_THREADS,
+    REASONING_TIME_LABELS,
     ensure_runtime_directories,
     get_model_labels,
     resolve_model_by_label,
+    resolve_reasoning_tokens,
 )
 from llm.runtime import RuntimeStatus, get_runtime
 from ui.chat_panel import (
@@ -24,6 +27,8 @@ from ui.library import ConversationLibrary
 from ui.recents_panel import render_recents_sidebar
 from ui.runtime_panel import render_model_sidebar
 from ui.theme import apply_theme
+
+REASONING_TIME_KEY = "reasoning_time_label"
 
 st.set_page_config(page_title="LocalGridMind", layout="wide")
 ensure_runtime_directories()
@@ -42,6 +47,11 @@ model_labels = get_model_labels()
 selected_model = None
 runtime = get_runtime()
 sidebar_busy = runtime.is_generating or runtime.is_titling
+model_selects_busy = (
+    sidebar_busy or runtime.status is RuntimeStatus.LOADING
+)
+if REASONING_TIME_KEY not in st.session_state:
+    st.session_state[REASONING_TIME_KEY] = DEFAULT_REASONING_TIME_LABEL
 
 with st.sidebar:
     if st.button("New chat", use_container_width=True, disabled=sidebar_busy):
@@ -68,8 +78,18 @@ with st.sidebar:
     with st.expander("Local model", expanded=True):
         st.caption(f"CPU threads locked to {N_THREADS}.")
         if model_labels:
-            selected_label = st.selectbox("Active GGUF model", options=model_labels)
+            selected_label = st.selectbox(
+                "Selected model",
+                options=model_labels,
+                disabled=model_selects_busy,
+            )
             selected_model = resolve_model_by_label(selected_label)
+            st.selectbox(
+                "Reasoning time",
+                options=list(REASONING_TIME_LABELS),
+                key=REASONING_TIME_KEY,
+                disabled=model_selects_busy,
+            )
             render_model_sidebar(selected_model.path if selected_model else None)
         else:
             st.warning(
@@ -77,11 +97,15 @@ with st.sidebar:
             )
             render_model_sidebar(None)
 
+chat_max_tokens = resolve_reasoning_tokens(
+    str(st.session_state.get(REASONING_TIME_KEY, DEFAULT_REASONING_TIME_LABEL))
+)
 model_ready = selected_model is not None and runtime.status is RuntimeStatus.READY
 render_chat_shell(
     model_ready=model_ready,
     library=library,
     conversation_id=conversation_id,
+    max_tokens=chat_max_tokens,
 )
 
 # Full-script poll. Fragments on Windows leave ghost status boxes and can

@@ -88,6 +88,7 @@ def render_chat_shell(
     model_ready: bool,
     library: ConversationLibrary,
     conversation_id: int,
+    max_tokens: int,
 ) -> None:
     """History (scrollable) plus a bottom-pinned chat input."""
     thread = ensure_thread()
@@ -99,7 +100,7 @@ def render_chat_shell(
         _render_turn(message)
 
     runtime = get_runtime()
-    _offer_generate_again(thread, model_ready=model_ready)
+    _offer_generate_again(thread, model_ready=model_ready, max_tokens=max_tokens)
     if runtime.is_generating:
         elapsed_s = runtime.generate_elapsed_seconds
         elapsed = format_elapsed_label(elapsed_s)
@@ -138,12 +139,14 @@ def render_chat_shell(
             stored["content"],
             created_at=stored["created_at"],
         )
-        runtime.start_generate(prompt.strip())
+        runtime.start_generate(prompt.strip(), max_tokens=max_tokens)
         st.session_state[AWAITING_KEY] = True
         st.rerun()
 
 
-def _offer_generate_again(thread: list[dict], *, model_ready: bool) -> None:
+def _offer_generate_again(
+    thread: list[dict], *, model_ready: bool, max_tokens: int
+) -> None:
     """Offer a steered retry after a think-only or stopped reply."""
     runtime = get_runtime()
     if not model_ready or runtime.is_generating or runtime.is_titling:
@@ -159,7 +162,7 @@ def _offer_generate_again(thread: list[dict], *, model_ready: bool) -> None:
     if not user_text:
         return
     if st.button("Generate again", key="lgm-generate-again"):
-        runtime.start_generate(build_retry_prompt(user_text))
+        runtime.start_generate(build_retry_prompt(user_text), max_tokens=max_tokens)
         st.session_state[AWAITING_KEY] = True
         st.rerun()
 

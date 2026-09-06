@@ -14,7 +14,7 @@ text. It must not invent numeric answers.
 | 2 Conversational shell | Implemented | Fixed input, scrollable history, user right / assistant left, no avatars, timestamps, New chat |
 | 3 Conversation library | Implemented | Recents list, SQLite persist, switch threads, auto-titles |
 | 4 Generate wait UX | Implemented | 1536-token budget, Stop, honest wait copy, Generate again |
-| 5 Reasoning time | Planned | Sidebar duration (`~2 min`…`~10 min`) maps to the token budget |
+| 5 Reasoning time | Implemented | Sidebar duration (`~2 min`…`~10 min`) maps to the token budget |
 | 6 Workbook intelligence | Planned | Folder pack, schema, stored formulas, external-link graph |
 | 7 Hidden interpreter | Planned | Restricted execution of generated Pandas; users never see Python |
 | 8 Export | Planned | Cleaner `.xlsx` / `.csv` download |
