@@ -17,7 +17,7 @@ text. It must not invent numeric answers.
 | 5 Reasoning time | Implemented | Sidebar duration (`~2 min`…`~10 min`) maps to the token budget |
 | 6 Workbook intelligence | Implemented | Attach a file or folder pack to the **current** Recents chat. Local copy + one-shot inventory (schema, stored formulas, external links). Later questions in that thread reuse the cache. Native chat paperclip + a separate folder picker. No interpreter. |
 | 6.1 Honest inventory prompt | Implemented | Compact prompt lists named ranges, links (or none), and stored formulas **before** sheet noise. Persist a finished reply if the page reconnects. Human tests: extraction holds; a 7B still paraphrases facts. |
-| 6.2 Inventory lookup | Next | The app answers named-range, external-link, and “where is this computed” questions from the structured inventory. The local model does not retrieve those facts. |
+| 6.2 Inventory lookup | Implemented | The app answers named-range, external-link, and “where is this computed” questions from the structured inventory. Human-verified unloaded on Ginzu and Rates/Books. The local model does not retrieve those facts. |
 | 6b Workbook library | Later | Sidebar Library under New chat. Reuse packs across conversations. Include / exclude for the active chat only. Not a global always-on corpus. |
 | 7 Hidden interpreter | Planned | Restricted execution of generated Pandas; users never see Python |
 | 8 Export | Planned | Cleaner `.xlsx` / `.csv` download |

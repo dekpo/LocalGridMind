@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 from config import UPLOADS_DIR
+from core.lookup import answer_from_json, answer_inventory_question
 from core.packs import (
     NoWorkbookFilesError,
     attach_uploads_to_conversation,
@@ -169,11 +170,13 @@ def render_chat_shell(
             ):
                 runtime.request_stop()
                 st.rerun()
-    placeholder = (
-        "Ask a question or attach a workbook"
-        if model_ready
-        else "Attach a workbook, or load a local model to ask"
-    )
+    pack = library.get_conversation_pack(conversation_id)
+    if model_ready:
+        placeholder = "Ask a question or attach a workbook"
+    elif pack is not None:
+        placeholder = "Ask about this workbook, or load a local model"
+    else:
+        placeholder = "Attach a workbook, or load a local model to ask"
     prompt = st.chat_input(
         placeholder,
         disabled=busy,
@@ -201,19 +204,18 @@ def render_chat_shell(
                 stored["content"],
                 created_at=stored["created_at"],
             )
-            if model_ready:
+            lookup = _lookup_reply(library, conversation_id, question)
+            if lookup:
+                _persist_assistant(thread, library, conversation_id, lookup)
+            elif model_ready:
                 runtime.start_generate(
                     _model_prompt(library, conversation_id, question),
                     max_tokens=max_tokens,
                 )
                 st.session_state[AWAITING_KEY] = True
             else:
-                notice = add_message(thread, "assistant", NEED_MODEL_NOTICE)
-                library.append_message(
-                    conversation_id,
-                    "assistant",
-                    notice["content"],
-                    created_at=notice["created_at"],
+                _persist_assistant(
+                    thread, library, conversation_id, NEED_MODEL_NOTICE
                 )
             st.rerun()
 
@@ -328,6 +330,10 @@ def _handle_attachment(
     )
     if not question.strip():
         return
+    lookup = answer_inventory_question(question, result.inventory)
+    if lookup:
+        _persist_assistant(thread, library, conversation_id, lookup)
+        return
     runtime = get_runtime()
     if model_ready and not runtime.is_generating and not runtime.is_titling:
         runtime.start_generate(
@@ -336,13 +342,7 @@ def _handle_attachment(
         )
         st.session_state[AWAITING_KEY] = True
     elif not model_ready:
-        notice = add_message(thread, "assistant", NEED_MODEL_NOTICE)
-        library.append_message(
-            conversation_id,
-            "assistant",
-            notice["content"],
-            created_at=notice["created_at"],
-        )
+        _persist_assistant(thread, library, conversation_id, NEED_MODEL_NOTICE)
 
 
 def _submission_text_and_files(prompt: Any) -> tuple[str, list[Any]]:
@@ -356,6 +356,30 @@ def _submission_text_and_files(prompt: Any) -> tuple[str, list[Any]]:
         text = str(prompt.get("text") or "").strip()
         files = prompt.get("files") or []
     return text, list(files or [])
+
+
+def _lookup_reply(
+    library: ConversationLibrary, conversation_id: int, question: str
+) -> str | None:
+    pack = library.get_conversation_pack(conversation_id)
+    if pack is None:
+        return None
+    return answer_from_json(question, pack.inventory_json)
+
+
+def _persist_assistant(
+    thread: list[dict],
+    library: ConversationLibrary,
+    conversation_id: int,
+    content: str,
+) -> None:
+    stored = add_message(thread, "assistant", content)
+    library.append_message(
+        conversation_id,
+        "assistant",
+        stored["content"],
+        created_at=stored["created_at"],
+    )
 
 
 def _model_prompt(

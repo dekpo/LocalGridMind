@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.core.inventory import (
     MAX_PROMPT_CHARS,
+    PackInventory,
     build_pack_inventory,
     detect_excel_features,
     inspect_file,
@@ -163,6 +164,20 @@ def test_folder_pack_prompt_lists_present_and_missing_links(
     assert "Books.xlsx" in missing_prompt
     assert "(missing)" in missing_prompt
     assert "MISSING" in missing_prompt
+
+
+def test_pack_json_roundtrip_keeps_wacc_formulas(tmp_path: Path) -> None:
+    path = write_wacc_pack_xlsx(tmp_path / "wacc_pack.xlsx")
+    pack = build_pack_inventory([path])
+    restored = PackInventory.from_json(pack.to_json())
+    cells = {
+        item.cell
+        for file in restored.files
+        for item in file.formulas
+    }
+    assert "Input sheet!B35" in cells
+    assert "Cost of capital!B13" in cells
+    assert restored.files[0].formula_total == pack.files[0].formula_total
 
 
 def test_build_chat_prompt_forbids_invented_cells() -> None:
