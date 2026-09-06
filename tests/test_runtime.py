@@ -146,6 +146,16 @@ def test_generate_strips_think_tags(tmp_path: Path) -> None:
     assert "stopping_criteria" not in FakeLlama.instances[0].complete_kwargs
 
 
+def test_generate_honors_custom_max_tokens(tmp_path: Path) -> None:
+    model = tmp_path / "demo.gguf"
+    runtime = ModelRuntime(llama_factory=FakeLlama)
+    runtime.load(model)
+
+    runtime.generate("ping", max_tokens=512)
+
+    assert FakeLlama.instances[0].complete_kwargs["max_tokens"] == 512
+
+
 def test_generate_before_load_raises() -> None:
     runtime = ModelRuntime(llama_factory=FakeLlama)
     with pytest.raises(ModelNotReadyError):
