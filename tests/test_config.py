@@ -6,11 +6,13 @@ from src.config import (
     CHAT_MAX_TOKENS,
     CHATS_DB_PATH,
     CHATS_DIR,
+    DATA_DIR,
     DEFAULT_REASONING_TIME_LABEL,
     N_CTX,
     PROJECT_ROOT,
     REASONING_TIME_LABELS,
     REASONING_TIME_TOKENS,
+    UPLOADS_DIR,
     list_available_models,
     resolve_reasoning_tokens,
 )
@@ -36,6 +38,8 @@ def test_list_available_models_missing_directory(tmp_path: Path) -> None:
 def test_chats_db_path_is_under_data_chats() -> None:
     assert CHATS_DIR == PROJECT_ROOT / "data" / "chats"
     assert CHATS_DB_PATH == CHATS_DIR / "library.sqlite"
+    assert DATA_DIR == PROJECT_ROOT / "data" / "uploads"
+    assert UPLOADS_DIR == DATA_DIR
 
 
 def test_chat_token_budget_leaves_room_for_a_visible_reply() -> None:

@@ -233,6 +233,24 @@ class ModelRuntime:
         with self._lock:
             return self._cancel_generate
 
+    def consume_finished_reply(self) -> tuple[str | None, float | None]:
+        """Take a finished generate so a reconnect can still persist it.
+
+        Clears last_reply / reply_error. Leaves last_generate_seconds.
+        Returns (None, None) while generating or when nothing is waiting.
+        """
+        with self._lock:
+            if self._generating:
+                return None, None
+            error = self._reply_error
+            reply = self._last_reply
+            elapsed = self._last_generate_seconds
+            if not error and not reply:
+                return None, None
+            self._reply_error = None
+            self._last_reply = None
+            return (error or reply), elapsed
+
     def request_stop(self) -> None:
         """Ask the in-flight completion to stop at the next token."""
         with self._lock:

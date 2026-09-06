@@ -5,6 +5,30 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 6.1 — Honest inventory prompt (2026-09-06)
+
+The compact prompt sent to the local model now lists named ranges, external
+links (or an explicit `none`), and stored formulas **before** sheet columns.
+Empty columns are omitted. Formulas that mention WACC, cost of capital,
+lookups, or other workbooks are kept first when the list is capped. The
+preamble forbids invented cell addresses. A finished reply is persisted
+even if Streamlit dropped the waiting flag after a reconnect. Tests use
+synthetic workbooks only. Human checks confirmed the extract on a large
+valuation workbook and a two-file linked folder. The local 7B can still
+rephrase those facts incorrectly; the next step is deterministic
+inventory lookup, not a model swap.
+
+### Phase 6 — Workbook intelligence (2026-09-06)
+
+Attach a workbook or a folder of linked workbooks to the **current**
+Recents chat. Files are copied under `data/uploads/` and inventoried
+once (sheets, columns, types, samples, stored formulas, named ranges,
+external links). VBA / Power Query / Pivot / DAX are flagged as
+present, not interpreted. Later questions in that thread reuse the
+cached inventory; the local model never receives `.xlsx` bytes. Attach
+with the official chat paperclip or a separate folder picker. Tests use
+tiny synthetic workbooks only.
+
 ### Phase 5 — Reasoning time (2026-09-06)
 
 The Local model expander lists **Selected model** (was Active GGUF

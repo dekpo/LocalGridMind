@@ -53,6 +53,30 @@ class Message:
         return item
 
 
+@dataclass(frozen=True)
+class WorkbookPack:
+    """Local copy + cached inventory. One pack may later join many chats."""
+
+    id: int
+    display_name: str
+    inventory_json: str
+    english_text: str
+    prompt_text: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class WorkbookFile:
+    """One stored workbook inside a pack."""
+
+    id: int
+    pack_id: int
+    original_name: str
+    stored_relpath: str
+    size_bytes: int
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -217,6 +241,198 @@ class ConversationLibrary:
             if deleted.rowcount == 0:
                 raise KeyError(f"Unknown conversation: {conversation_id}")
 
+    def create_pack(
+        self,
+        display_name: str,
+        inventory_json: str,
+        english_text: str,
+        prompt_text: str,
+    ) -> WorkbookPack:
+        when = utc_now_iso()
+        with self._session() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO workbook_packs (
+                    display_name, inventory_json, english_text, prompt_text,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (display_name, inventory_json, english_text, prompt_text, when, when),
+            )
+            pack_id = int(cursor.lastrowid)
+        found = self.get_pack(pack_id)
+        if found is None:
+            raise RuntimeError("Failed to create workbook pack.")
+        return found
+
+    def get_pack(self, pack_id: int) -> WorkbookPack | None:
+        with self._session() as conn:
+            row = conn.execute(
+                """
+                SELECT id, display_name, inventory_json, english_text,
+                       prompt_text, created_at, updated_at
+                FROM workbook_packs
+                WHERE id = ?
+                """,
+                (pack_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _pack_from_row(row)
+
+    def add_pack_file(
+        self,
+        pack_id: int,
+        *,
+        original_name: str,
+        stored_relpath: str,
+        size_bytes: int,
+    ) -> WorkbookFile:
+        if self.get_pack(pack_id) is None:
+            raise KeyError(f"Unknown workbook pack: {pack_id}")
+        with self._session() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO workbook_files (
+                    pack_id, original_name, stored_relpath, size_bytes
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (pack_id, original_name, stored_relpath, int(size_bytes)),
+            )
+            file_id = int(cursor.lastrowid)
+        return WorkbookFile(
+            id=file_id,
+            pack_id=pack_id,
+            original_name=original_name,
+            stored_relpath=stored_relpath,
+            size_bytes=int(size_bytes),
+        )
+
+    def list_pack_files(self, pack_id: int) -> list[WorkbookFile]:
+        with self._session() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, pack_id, original_name, stored_relpath, size_bytes
+                FROM workbook_files
+                WHERE pack_id = ?
+                ORDER BY id ASC
+                """,
+                (pack_id,),
+            ).fetchall()
+        return [_file_from_row(row) for row in rows]
+
+    def replace_conversation_pack(
+        self, conversation_id: int, pack_id: int
+    ) -> None:
+        if self.get_conversation(conversation_id) is None:
+            raise KeyError(f"Unknown conversation: {conversation_id}")
+        if self.get_pack(pack_id) is None:
+            raise KeyError(f"Unknown workbook pack: {pack_id}")
+        when = utc_now_iso()
+        with self._session() as conn:
+            conn.execute(
+                "DELETE FROM conversation_packs WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            conn.execute(
+                """
+                INSERT INTO conversation_packs (
+                    conversation_id, pack_id, attached_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (conversation_id, pack_id, when),
+            )
+            conn.execute(
+                "UPDATE conversations SET updated_at = ? WHERE id = ?",
+                (when, conversation_id),
+            )
+
+    def get_conversation_pack(self, conversation_id: int) -> WorkbookPack | None:
+        with self._session() as conn:
+            row = conn.execute(
+                """
+                SELECT p.id, p.display_name, p.inventory_json, p.english_text,
+                       p.prompt_text, p.created_at, p.updated_at
+                FROM conversation_packs AS cp
+                JOIN workbook_packs AS p ON p.id = cp.pack_id
+                WHERE cp.conversation_id = ?
+                ORDER BY cp.attached_at DESC, p.id DESC
+                LIMIT 1
+                """,
+                (conversation_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _pack_from_row(row)
+
+    def list_attached_pack_ids(self, conversation_id: int) -> list[int]:
+        with self._session() as conn:
+            rows = conn.execute(
+                """
+                SELECT pack_id FROM conversation_packs
+                WHERE conversation_id = ?
+                ORDER BY attached_at DESC, pack_id DESC
+                """,
+                (conversation_id,),
+            ).fetchall()
+        return [int(row["pack_id"]) for row in rows]
+
+    def link_pack_to_conversation(
+        self, conversation_id: int, pack_id: int
+    ) -> None:
+        """Add a pack link without dropping others (Phase 6b can use this)."""
+        if self.get_conversation(conversation_id) is None:
+            raise KeyError(f"Unknown conversation: {conversation_id}")
+        if self.get_pack(pack_id) is None:
+            raise KeyError(f"Unknown workbook pack: {pack_id}")
+        when = utc_now_iso()
+        with self._session() as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO conversation_packs (
+                    conversation_id, pack_id, attached_at
+                )
+                VALUES (?, ?, ?)
+                """,
+                (conversation_id, pack_id, when),
+            )
+
+    def delete_pack(self, pack_id: int) -> list[str]:
+        """Remove a pack. Returns stored relative paths so callers can unlink."""
+        relpaths = [item.stored_relpath for item in self.list_pack_files(pack_id)]
+        with self._session() as conn:
+            deleted = conn.execute(
+                "DELETE FROM workbook_packs WHERE id = ?",
+                (pack_id,),
+            )
+            if deleted.rowcount == 0:
+                raise KeyError(f"Unknown workbook pack: {pack_id}")
+        return relpaths
+
+    def list_orphan_pack_ids(self) -> list[int]:
+        with self._session() as conn:
+            rows = conn.execute(
+                """
+                SELECT p.id FROM workbook_packs AS p
+                LEFT JOIN conversation_packs AS cp ON cp.pack_id = p.id
+                WHERE cp.pack_id IS NULL
+                """
+            ).fetchall()
+        return [int(row["id"]) for row in rows]
+
+    def purge_orphan_packs(self, keep_ids: set[int] | None = None) -> list[str]:
+        """Delete packs with no conversation link. Return stored relpaths."""
+        keep = keep_ids or set()
+        relpaths: list[str] = []
+        for pack_id in self.list_orphan_pack_ids():
+            if pack_id in keep:
+                continue
+            relpaths.extend(self.delete_pack(pack_id))
+        return relpaths
+
     def set_title(self, conversation_id: int, title: str) -> Conversation:
         cleaned = heuristic_title(title)
         when = utc_now_iso()
@@ -266,6 +482,41 @@ class ConversationLibrary:
                 );
                 CREATE INDEX IF NOT EXISTS idx_messages_conversation
                     ON messages (conversation_id, id);
+                CREATE TABLE IF NOT EXISTS workbook_packs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    display_name TEXT NOT NULL,
+                    inventory_json TEXT NOT NULL,
+                    english_text TEXT NOT NULL,
+                    prompt_text TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS workbook_files (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pack_id INTEGER NOT NULL,
+                    original_name TEXT NOT NULL,
+                    stored_relpath TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    FOREIGN KEY (pack_id)
+                        REFERENCES workbook_packs(id)
+                        ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS conversation_packs (
+                    conversation_id INTEGER NOT NULL,
+                    pack_id INTEGER NOT NULL,
+                    attached_at TEXT NOT NULL,
+                    PRIMARY KEY (conversation_id, pack_id),
+                    FOREIGN KEY (conversation_id)
+                        REFERENCES conversations(id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (pack_id)
+                        REFERENCES workbook_packs(id)
+                        ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_workbook_files_pack
+                    ON workbook_files (pack_id);
+                CREATE INDEX IF NOT EXISTS idx_conversation_packs_pack
+                    ON conversation_packs (pack_id);
                 """
             )
             columns = {
@@ -299,6 +550,28 @@ def _conversation_from_row(row: sqlite3.Row) -> Conversation:
         title=str(row["title"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+    )
+
+
+def _pack_from_row(row: sqlite3.Row) -> WorkbookPack:
+    return WorkbookPack(
+        id=int(row["id"]),
+        display_name=str(row["display_name"]),
+        inventory_json=str(row["inventory_json"]),
+        english_text=str(row["english_text"]),
+        prompt_text=str(row["prompt_text"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+    )
+
+
+def _file_from_row(row: sqlite3.Row) -> WorkbookFile:
+    return WorkbookFile(
+        id=int(row["id"]),
+        pack_id=int(row["pack_id"]),
+        original_name=str(row["original_name"]),
+        stored_relpath=str(row["stored_relpath"]),
+        size_bytes=int(row["size_bytes"]),
     )
 
 

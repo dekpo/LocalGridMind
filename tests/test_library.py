@@ -168,6 +168,77 @@ def test_unknown_conversation_raises(tmp_path: Path) -> None:
         library.set_title(99, "Gone")
 
 
+def test_pack_tables_allow_one_pack_on_many_chats(tmp_path: Path) -> None:
+    library = _library(tmp_path)
+    first = library.create_conversation("Alpha")
+    second = library.create_conversation("Beta")
+    pack = library.create_pack("Rates.xlsx", "{}", "english", "prompt")
+    library.add_pack_file(
+        pack.id,
+        original_name="Rates.xlsx",
+        stored_relpath="abc/Rates.xlsx",
+        size_bytes=12,
+    )
+    library.replace_conversation_pack(first.id, pack.id)
+    library.link_pack_to_conversation(second.id, pack.id)
+
+    assert library.get_conversation_pack(first.id).id == pack.id
+    assert library.get_conversation_pack(second.id).id == pack.id
+    assert library.list_pack_files(pack.id)[0].original_name == "Rates.xlsx"
+    library.delete_conversation(first.id)
+    assert library.get_conversation_pack(second.id).id == pack.id
+    assert library.list_orphan_pack_ids() == []
+
+
+def test_replace_conversation_pack_leaves_previous_pack_orphaned(
+    tmp_path: Path,
+) -> None:
+    library = _library(tmp_path)
+    conversation = library.create_conversation()
+    older = library.create_pack("Old", "{}", "old", "old")
+    newer = library.create_pack("New", "{}", "new", "new")
+    library.replace_conversation_pack(conversation.id, older.id)
+    library.replace_conversation_pack(conversation.id, newer.id)
+    assert library.get_conversation_pack(conversation.id).id == newer.id
+    assert library.list_orphan_pack_ids() == [older.id]
+    assert library.purge_orphan_packs() == []
+    assert library.get_pack(older.id) is None
+
+
+def test_migrates_pack_tables_on_existing_schema(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy.sqlite"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                elapsed_seconds REAL
+            );
+            INSERT INTO conversations (title, created_at, updated_at)
+            VALUES ('Legacy', '2026-09-05T00:00:00+00:00', '2026-09-05T00:00:00+00:00');
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    library = ConversationLibrary(db_path)
+    pack = library.create_pack("Legacy pack", "{}", "english", "prompt")
+    library.replace_conversation_pack(1, pack.id)
+    assert library.get_conversation_pack(1) is not None
+
+
 def test_library_never_uses_the_real_app_db(tmp_path: Path) -> None:
     library = _library(tmp_path)
     library.create_conversation()
