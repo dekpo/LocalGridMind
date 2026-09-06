@@ -11,11 +11,13 @@ from config import (
     DEFAULT_REASONING_TIME_LABEL,
     N_THREADS,
     REASONING_TIME_LABELS,
+    UPLOADS_DIR,
     ensure_runtime_directories,
     get_model_labels,
     resolve_model_by_label,
     resolve_reasoning_tokens,
 )
+from core.packs import purge_orphan_pack_files
 from llm.runtime import RuntimeStatus, get_runtime
 from ui.chat_panel import (
     activate_conversation,
@@ -62,6 +64,7 @@ with st.sidebar:
     if recents.deleted_id is not None:
         try:
             library.delete_conversation(recents.deleted_id)
+            purge_orphan_pack_files(library, UPLOADS_DIR)
         except KeyError:
             pass
         if recents.deleted_id == conversation_id:

@@ -47,6 +47,7 @@ PROJECT_ROOT = get_project_root()
 SRC_DIR = PROJECT_ROOT / "src"
 MODELS_DIR = PROJECT_ROOT / "models"
 DATA_DIR = PROJECT_ROOT / "data" / "uploads"
+UPLOADS_DIR = DATA_DIR
 CHATS_DIR = PROJECT_ROOT / "data" / "chats"
 CHATS_DB_PATH = CHATS_DIR / "library.sqlite"
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"

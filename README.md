@@ -5,14 +5,19 @@ systems, extracts data and spreadsheet logic, explains it, and can emit
 a simpler workbook. A local model drives the work. Users never touch
 Python or a terminal.
 
-This repository has completed **phase 5 (reasoning time)**. Read
-`PRODUCT.md` for intent, feasibility, and limits. See `CHANGELOG.md`
-for what landed and `ROADMAP.md` for the phase plan.
+This repository has completed **phase 6.1 (honest inventory prompt)**.
+Read `PRODUCT.md` for intent, feasibility, and limits. See
+`CHANGELOG.md` for what landed and `ROADMAP.md` for the phase plan.
 
-The next public step is workbook intelligence (folder pack, schema,
-stored formulas, external links). The local model remains a hidden
-generator of analysis code and Excel formula text. It must not invent
-numeric answers.
+Attach a file or a folder of linked workbooks to the current chat.
+The app keeps a local copy and a compact inventory (schema, stored
+formulas, external links). Later questions reuse that cache. The local
+model remains a hidden generator of analysis code and Excel formula
+text. It must not invent numeric answers or cell addresses that are
+not in the inventory. The next public step is deterministic inventory
+lookup (the app answers named ranges, links, and “where is this
+computed” without asking the model to retrieve those facts). A
+Workbook library (reuse a pack across chats) comes later.
 
 ## Requirements (developers only)
 

@@ -47,14 +47,21 @@ their data and logic understandable, extractable, and simpler to reuse.
 | User sees | Engine does (hidden) |
 | --- | --- |
 | ChatGPT-like thread (user on the right, answers on the left, input fixed at the bottom) | Local GGUF completion; reasoning tags stripped |
-| File / folder picker, English UI | openpyxl / Pandas load |
-| Questions in business language | Schema + formula inventory sent to the local LLM |
+| File / folder picker, English UI | Copy once under `data/uploads/`; openpyxl / Pandas load |
+| Questions in business language | Cached schema + formula inventory sent to the local LLM |
 | Explanations, extracted tables, suggested Excel formulas | LLM emits Python (and/or Excel formula text) |
 | Download a cleaner workbook | Restricted local execution, then export |
 
 Users never see generated Python. The local LLM is a **hidden code and
 formula generator**, not a mental calculator. The conversation layout
 is familiar on purpose; it is the analyst shell, not a general chat toy.
+
+Workbooks stay on the machine. The analyst attaches a file or a folder
+of linked workbooks **once** to a conversation. The app keeps a local
+copy and a compact inventory. Later questions in that same thread reuse
+the inventory; the model does not receive the raw workbook. A later
+phase may offer a Library to reuse a pack across chats. That is not
+required for the first workbook-intelligence step.
 
 ## Distribution (non-developer machines)
 

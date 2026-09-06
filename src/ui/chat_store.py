@@ -15,6 +15,8 @@ TITLE_CONVERSATION_ID_KEY = "title_conversation_id"
 AUTO_TITLE_DONE_KEY = "auto_title_done_ids"
 DELETE_DIALOG_OPEN_KEY = "delete_dialog_open"
 DELETE_CONFIRMED_ID_KEY = "delete_confirmed_id"
+FOLDER_UPLOAD_NONCE_KEY = "folder_pack_nonce"
+PACK_ATTACH_ERROR_KEY = "pack_attach_error"
 RECENT_TITLE_MAX_CHARS = 20
 
 

@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import html
+from pathlib import Path
+from typing import Any
 
 import streamlit as st
 
+from config import UPLOADS_DIR
+from core.packs import (
+    NoWorkbookFilesError,
+    attach_uploads_to_conversation,
+    uploads_from_files,
+)
+from core.prompt import build_chat_prompt
 from llm.runtime import (
     RuntimeStatus,
-    build_retry_prompt,
     get_runtime,
     is_retryable_notice,
 )
@@ -17,6 +25,8 @@ from ui.chat_store import (
     AWAITING_KEY,
     AWAITING_TITLE_KEY,
     CONVERSATION_ID_KEY,
+    FOLDER_UPLOAD_NONCE_KEY,
+    PACK_ATTACH_ERROR_KEY,
     THREAD_KEY,
     TITLE_CONVERSATION_ID_KEY,
     add_message,
@@ -32,6 +42,13 @@ from ui.library import (
     build_title_prompt,
     heuristic_title,
     sanitize_model_title,
+)
+from ui.reply_ingest import ingest_finished_reply
+
+WORKBOOK_TYPES = ["xlsx", "xlsm", "csv"]
+NEED_MODEL_NOTICE = (
+    "The workbook inventory is ready in this chat. "
+    "Load a local model to ask a question."
 )
 
 
@@ -96,11 +113,39 @@ def render_chat_shell(
     _maybe_auto_title(library, conversation_id, model_ready)
     _ingest_finished_title(library)
 
+    runtime = get_runtime()
+    busy = runtime.is_generating or runtime.is_titling
+    attach_error = st.session_state.pop(PACK_ATTACH_ERROR_KEY, None)
+    if attach_error:
+        st.error(str(attach_error))
+    folder_files = _render_folder_attach(
+        library, conversation_id, disabled=busy
+    )
+    if folder_files and not busy:
+        _handle_attachment(
+            thread,
+            library,
+            conversation_id,
+            files=folder_files,
+            question="",
+            model_ready=model_ready,
+            max_tokens=max_tokens,
+        )
+        st.session_state[FOLDER_UPLOAD_NONCE_KEY] = (
+            int(st.session_state.get(FOLDER_UPLOAD_NONCE_KEY, 0)) + 1
+        )
+        st.rerun()
+
     for message in thread:
         _render_turn(message)
 
-    runtime = get_runtime()
-    _offer_generate_again(thread, model_ready=model_ready, max_tokens=max_tokens)
+    _offer_generate_again(
+        thread,
+        library=library,
+        conversation_id=conversation_id,
+        model_ready=model_ready,
+        max_tokens=max_tokens,
+    )
     if runtime.is_generating:
         elapsed_s = runtime.generate_elapsed_seconds
         elapsed = format_elapsed_label(elapsed_s)
@@ -124,28 +169,62 @@ def render_chat_shell(
             ):
                 runtime.request_stop()
                 st.rerun()
-    busy = runtime.is_generating or runtime.is_titling or not model_ready
     placeholder = (
-        "Ask a question"
+        "Ask a question or attach a workbook"
         if model_ready
-        else "Load a local model to start"
+        else "Attach a workbook, or load a local model to ask"
     )
-    prompt = st.chat_input(placeholder, disabled=busy)
-    if prompt and model_ready and not runtime.is_generating and not runtime.is_titling:
-        stored = add_message(thread, "user", prompt.strip())
-        library.append_message(
-            conversation_id,
-            "user",
-            stored["content"],
-            created_at=stored["created_at"],
-        )
-        runtime.start_generate(prompt.strip(), max_tokens=max_tokens)
-        st.session_state[AWAITING_KEY] = True
-        st.rerun()
+    prompt = st.chat_input(
+        placeholder,
+        disabled=busy,
+        accept_file="multiple",
+        file_type=WORKBOOK_TYPES,
+    )
+    if prompt and not busy:
+        question, files = _submission_text_and_files(prompt)
+        if files:
+            _handle_attachment(
+                thread,
+                library,
+                conversation_id,
+                files=files,
+                question=question,
+                model_ready=model_ready,
+                max_tokens=max_tokens,
+            )
+            st.rerun()
+        elif question:
+            stored = add_message(thread, "user", question)
+            library.append_message(
+                conversation_id,
+                "user",
+                stored["content"],
+                created_at=stored["created_at"],
+            )
+            if model_ready:
+                runtime.start_generate(
+                    _model_prompt(library, conversation_id, question),
+                    max_tokens=max_tokens,
+                )
+                st.session_state[AWAITING_KEY] = True
+            else:
+                notice = add_message(thread, "assistant", NEED_MODEL_NOTICE)
+                library.append_message(
+                    conversation_id,
+                    "assistant",
+                    notice["content"],
+                    created_at=notice["created_at"],
+                )
+            st.rerun()
 
 
 def _offer_generate_again(
-    thread: list[dict], *, model_ready: bool, max_tokens: int
+    thread: list[dict],
+    *,
+    library: ConversationLibrary,
+    conversation_id: int,
+    model_ready: bool,
+    max_tokens: int,
 ) -> None:
     """Offer a steered retry after a think-only or stopped reply."""
     runtime = get_runtime()
@@ -162,9 +241,133 @@ def _offer_generate_again(
     if not user_text:
         return
     if st.button("Generate again", key="lgm-generate-again"):
-        runtime.start_generate(build_retry_prompt(user_text), max_tokens=max_tokens)
+        runtime.start_generate(
+            _model_prompt(library, conversation_id, user_text, retry=True),
+            max_tokens=max_tokens,
+        )
         st.session_state[AWAITING_KEY] = True
         st.rerun()
+
+
+def _render_folder_attach(
+    library: ConversationLibrary,
+    conversation_id: int,
+    *,
+    disabled: bool,
+) -> list[Any] | None:
+    pack = library.get_conversation_pack(conversation_id)
+    if pack is not None:
+        names = [
+            Path(item.original_name.replace("\\", "/")).name
+            for item in library.list_pack_files(pack.id)
+        ]
+        listed = ", ".join(names) if names else pack.display_name
+        st.caption(
+            f"Attached in this chat: {listed}. Attach again to replace."
+        )
+    with st.expander("Attach a folder of linked workbooks", expanded=False):
+        st.caption(
+            "Use this when files look up values in other workbooks. "
+            "The paperclip on the message bar attaches individual files."
+        )
+        nonce = int(st.session_state.setdefault(FOLDER_UPLOAD_NONCE_KEY, 0))
+        uploaded = st.file_uploader(
+            "Workbook folder",
+            type=WORKBOOK_TYPES,
+            accept_multiple_files="directory",
+            disabled=disabled,
+            key=f"folder_pack_{nonce}",
+        )
+        if uploaded:
+            return list(uploaded)
+    return None
+
+
+def _handle_attachment(
+    thread: list[dict],
+    library: ConversationLibrary,
+    conversation_id: int,
+    *,
+    files: list[Any],
+    question: str,
+    model_ready: bool,
+    max_tokens: int,
+) -> None:
+    try:
+        result = attach_uploads_to_conversation(
+            library,
+            conversation_id,
+            uploads_from_files(files),
+            UPLOADS_DIR,
+            question=question,
+        )
+    except NoWorkbookFilesError:
+        st.session_state[PACK_ATTACH_ERROR_KEY] = (
+            "No Excel or CSV files were found in that upload."
+        )
+        return
+    except Exception:
+        st.session_state[PACK_ATTACH_ERROR_KEY] = (
+            "Those workbooks could not be attached. Try saving them again from Excel."
+        )
+        return
+
+    user = add_message(thread, "user", result.user_text)
+    library.append_message(
+        conversation_id,
+        "user",
+        user["content"],
+        created_at=user["created_at"],
+    )
+    inventory = add_message(thread, "assistant", result.english_text)
+    library.append_message(
+        conversation_id,
+        "assistant",
+        inventory["content"],
+        created_at=inventory["created_at"],
+    )
+    if not question.strip():
+        return
+    runtime = get_runtime()
+    if model_ready and not runtime.is_generating and not runtime.is_titling:
+        runtime.start_generate(
+            _model_prompt(library, conversation_id, question),
+            max_tokens=max_tokens,
+        )
+        st.session_state[AWAITING_KEY] = True
+    elif not model_ready:
+        notice = add_message(thread, "assistant", NEED_MODEL_NOTICE)
+        library.append_message(
+            conversation_id,
+            "assistant",
+            notice["content"],
+            created_at=notice["created_at"],
+        )
+
+
+def _submission_text_and_files(prompt: Any) -> tuple[str, list[Any]]:
+    if prompt is None:
+        return "", []
+    if isinstance(prompt, str):
+        return prompt.strip(), []
+    text = str(getattr(prompt, "text", "") or "").strip()
+    files = getattr(prompt, "files", None)
+    if files is None and isinstance(prompt, dict):
+        text = str(prompt.get("text") or "").strip()
+        files = prompt.get("files") or []
+    return text, list(files or [])
+
+
+def _model_prompt(
+    library: ConversationLibrary,
+    conversation_id: int,
+    user_text: str,
+    *,
+    retry: bool = False,
+) -> str:
+    pack = library.get_conversation_pack(conversation_id)
+    inventory = pack.prompt_text if pack is not None else None
+    return build_chat_prompt(user_text, inventory, retry=retry)
 
 
 def _ingest_finished_reply(
@@ -173,27 +376,9 @@ def _ingest_finished_reply(
     conversation_id: int,
 ) -> None:
     runtime = get_runtime()
-    if runtime.is_generating or not st.session_state.get(AWAITING_KEY):
-        return
-    stored = None
-    elapsed = runtime.last_generate_seconds
-    if runtime.reply_error:
-        stored = add_message(
-            thread, "assistant", runtime.reply_error, elapsed_seconds=elapsed
-        )
-    elif runtime.last_reply:
-        stored = add_message(
-            thread, "assistant", runtime.last_reply, elapsed_seconds=elapsed
-        )
-    if stored is not None:
-        library.append_message(
-            conversation_id,
-            "assistant",
-            stored["content"],
-            created_at=stored["created_at"],
-            elapsed_seconds=elapsed,
-        )
-    st.session_state[AWAITING_KEY] = False
+    ingest_finished_reply(thread, library, conversation_id, runtime)
+    if not runtime.is_generating:
+        st.session_state[AWAITING_KEY] = False
 
 
 def _maybe_auto_title(
