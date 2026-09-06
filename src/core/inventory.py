@@ -129,11 +129,90 @@ class PackInventory:
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=True)
 
+    @classmethod
+    def from_json(cls, text: str) -> PackInventory:
+        """Rebuild a pack from cached JSON. Do not re-read workbook bytes."""
+        return pack_from_dict(json.loads(text))
+
     def to_english(self) -> str:
         return format_english(self)
 
     def to_prompt(self, *, budget: int = MAX_PROMPT_CHARS) -> str:
         return format_prompt(self, budget=budget)
+
+
+def pack_from_dict(data: dict[str, Any]) -> PackInventory:
+    """Restore dataclasses from `asdict` JSON. Missing keys stay empty."""
+    files = [_file_from_dict(item) for item in data.get("files") or []]
+    missing = [str(item) for item in data.get("missing_links") or []]
+    return PackInventory(files=files, missing_links=missing)
+
+
+def _file_from_dict(data: dict[str, Any]) -> FileInventory:
+    features_raw = data.get("features") or {}
+    features = FeatureFlags(
+        vba=bool(features_raw.get("vba")),
+        power_query=bool(features_raw.get("power_query")),
+        pivot=bool(features_raw.get("pivot")),
+        dax=bool(features_raw.get("dax")),
+    )
+    return FileInventory(
+        filename=str(data.get("filename") or ""),
+        kind=str(data.get("kind") or ""),
+        sheets=[_sheet_from_dict(item) for item in data.get("sheets") or []],
+        named_ranges=[
+            NamedRangeInfo(
+                name=str(item.get("name") or ""),
+                refers_to=str(item.get("refers_to") or ""),
+            )
+            for item in data.get("named_ranges") or []
+        ],
+        formulas=[
+            FormulaInfo(
+                cell=str(item.get("cell") or ""),
+                formula=str(item.get("formula") or ""),
+                external_books=[
+                    str(book) for book in item.get("external_books") or []
+                ],
+                label=str(item.get("label") or ""),
+                column_header=str(item.get("column_header") or ""),
+            )
+            for item in data.get("formulas") or []
+        ],
+        links=[
+            ExternalLinkInfo(
+                workbook=str(item.get("workbook") or ""),
+                used_in=str(item.get("used_in") or ""),
+                present_in_pack=bool(item.get("present_in_pack")),
+            )
+            for item in data.get("links") or []
+        ],
+        features=features,
+        issues=[str(item) for item in data.get("issues") or []],
+        unreadable=bool(data.get("unreadable")),
+        formula_total=int(data.get("formula_total") or 0),
+    )
+
+
+def _sheet_from_dict(data: dict[str, Any]) -> SheetInfo:
+    return SheetInfo(
+        name=str(data.get("name") or ""),
+        row_count=int(data.get("row_count") or 0),
+        column_count=int(data.get("column_count") or 0),
+        columns=[
+            ColumnInfo(
+                name=str(item.get("name") or ""),
+                inferred_type=str(item.get("inferred_type") or ""),
+                samples=[str(sample) for sample in item.get("samples") or []],
+                empty_ratio=float(item.get("empty_ratio") or 0.0),
+                issues=[str(issue) for issue in item.get("issues") or []],
+            )
+            for item in data.get("columns") or []
+        ],
+        empty_notes=[str(item) for item in data.get("empty_notes") or []],
+        hidden=bool(data.get("hidden")),
+        truncated=bool(data.get("truncated")),
+    )
 
 
 def is_workbook_name(name: str) -> bool:

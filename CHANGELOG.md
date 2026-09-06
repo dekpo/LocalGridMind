@@ -5,6 +5,13 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 6.2 — Inventory lookup (2026-09-06)
+
+Named ranges, external workbook links, and “where is WACC / cost of capital
+computed” are answered from the cached pack JSON. Those turns persist
+without loading a model. Other questions still use the Phase 6.1 prompt.
+Tests use synthetic workbooks only.
+
 ### Phase 6.1 — Honest inventory prompt (2026-09-06)
 
 The compact prompt sent to the local model now lists named ranges, external
