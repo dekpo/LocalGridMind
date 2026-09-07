@@ -9,10 +9,13 @@ from src.core.inventory import (
     FormulaInfo,
     PackInventory,
     build_pack_inventory,
+    parse_cell_addresses,
 )
 from src.core.lookup import (
+    CELL_QUOTE,
     EXTERNAL_LINKS,
     FILE_READS,
+    MAX_WHERE_HITS,
     NAMED_RANGES,
     WHERE_COMPUTED,
     answer_from_json,
@@ -41,6 +44,7 @@ def test_wacc_where_is_returns_b35_and_b13(tmp_path: Path) -> None:
         assert answer is not None
         assert "Input sheet!B35" in answer
         assert "Cost of capital!B13" in answer
+        assert answer.index("Input sheet!B35") < answer.index("Cost of capital!B13")
         assert "Industry lookup" not in answer
         assert "Terminal value" not in answer
 
@@ -163,3 +167,172 @@ def test_classify_minimum_intents() -> None:
         == FILE_READS
     )
     assert classify_inventory_intent("Suggest a paste-ready FCFF formula.") is None
+    assert (
+        classify_inventory_intent("What does Input sheet!B35 do?") == CELL_QUOTE
+    )
+    assert (
+        classify_inventory_intent("What does `Valuation output!C9` do?")
+        == CELL_QUOTE
+    )
+
+
+def test_parse_cell_addresses_keeps_sheet_not_question_words() -> None:
+    assert parse_cell_addresses("What does Rates!E2 do?") == ["Rates!E2"]
+    assert parse_cell_addresses("What does `Input sheet!B35` do?") == [
+        "Input sheet!B35"
+    ]
+    assert parse_cell_addresses("What does 'Cost of capital'!B13 do?") == [
+        "Cost of capital!B13"
+    ]
+    assert parse_cell_addresses("What does Valuation output!C9 do?") == [
+        "Valuation output!C9"
+    ]
+
+
+def test_wacc_what_does_b35_do_quotes_stored_formula(tmp_path: Path) -> None:
+    path = write_wacc_pack_xlsx(tmp_path / "wacc_pack.xlsx")
+    pack = build_pack_inventory([path])
+    cached = PackInventory.from_json(pack.to_json())
+    question = "What does `Input sheet!B35` do?"
+    assert classify_inventory_intent(question) == CELL_QUOTE
+    answer = answer_inventory_question(question, cached)
+    assert answer is not None
+    assert "Input sheet!B35" in answer
+    assert "='Cost of capital'!B13" in answer
+    assert "Initial cost of capital" in answer
+
+
+def test_rates_what_does_e2_do_keeps_books_sheet(tmp_path: Path) -> None:
+    rates = write_rates_xlsx(tmp_path / "Rates.xlsx")
+    books = write_books_xlsx(tmp_path / "Books.xlsx")
+    pack = build_pack_inventory([rates, books])
+    answer = answer_inventory_question("What does Rates!E2 do?", pack)
+    assert answer is not None
+    assert "Rates!E2" in answer
+    assert "=[Books.xlsx]Books!B2" in answer
+
+
+def test_unknown_cell_states_cap_without_reparsing() -> None:
+    pack = PackInventory(
+        files=[
+            FileInventory(
+                filename="big.xlsx",
+                kind="xlsx",
+                formulas=[
+                    FormulaInfo(
+                        cell="Input sheet!B35",
+                        formula="='Cost of capital'!B13",
+                        label="Initial cost of capital",
+                    )
+                ],
+                formula_total=1229,
+            )
+        ]
+    )
+    answer = answer_inventory_question(
+        "What does Valuation output!Z99 do?", pack
+    )
+    assert answer is not None
+    assert "Valuation output!Z99" in answer
+    assert "1229" in answer
+    assert "listed formulas" in answer
+    assert "Input sheet!B35" not in answer
+
+
+def test_cell_quote_uses_full_index_not_prompt_subset() -> None:
+    pack = PackInventory(
+        files=[
+            FileInventory(
+                filename="big.xlsx",
+                kind="xlsx",
+                formulas=[
+                    FormulaInfo(
+                        cell="Input sheet!B35",
+                        formula="='Cost of capital'!B13",
+                        label="Initial cost of capital",
+                    )
+                ],
+                all_formulas=[
+                    FormulaInfo(
+                        cell="Input sheet!B35",
+                        formula="='Cost of capital'!B13",
+                        label="Initial cost of capital",
+                    ),
+                    FormulaInfo(
+                        cell="Valuation output!Z99",
+                        formula="=C7-C8",
+                        label="Hidden FCFF",
+                    ),
+                ],
+                formula_total=2,
+            )
+        ]
+    )
+    answer = answer_inventory_question(
+        "What does Valuation output!Z99 do?", pack
+    )
+    assert answer is not None
+    assert "Valuation output!Z99" in answer
+    assert "=C7-C8" in answer
+    assert "listed formulas" not in answer
+
+
+def test_where_ignores_sheet_name_and_caps_hits() -> None:
+    extras = [
+        FormulaInfo(
+            cell=f"Cost of capital worksheet!I{row}",
+            formula=f"=H{row}",
+            label="Which approach will you be using?",
+        )
+        for row in range(5, 20)
+    ]
+    forecast = [
+        FormulaInfo(
+            cell=f"Valuation output!{col}12",
+            formula="=C12",
+            label="Cost of capital",
+        )
+        for col in "CDEFGHIJKLM"
+    ]
+    pack = PackInventory(
+        files=[
+            FileInventory(
+                filename="big.xlsx",
+                kind="xlsx",
+                formulas=[],
+                all_formulas=[
+                    FormulaInfo(
+                        cell="Input sheet!B35",
+                        formula="='Cost of capital worksheet'!B13",
+                        label="Initial cost of capital",
+                    ),
+                    FormulaInfo(
+                        cell="Cost of capital worksheet!B13",
+                        formula='=IF(B11="I will input",B12,B72)',
+                        label="Cost of capital based upon approach =",
+                    ),
+                    FormulaInfo(
+                        cell="Cost of capital worksheet!B31",
+                        formula="='Input sheet'!B13",
+                        label="Interest Expense on Debt =",
+                    ),
+                    *forecast,
+                    *extras,
+                ],
+                formula_total=2 + len(forecast) + len(extras),
+            )
+        ]
+    )
+    answer = answer_inventory_question(
+        "Where is WACC or the cost of capital computed?", pack
+    )
+    assert answer is not None
+    rows = [line for line in answer.splitlines() if line.startswith("- `")]
+    assert len(rows) == MAX_WHERE_HITS
+    assert "Input sheet!B35" in rows[0]
+    assert "Cost of capital worksheet!B13" in rows[1]
+    assert "Interest Expense" not in answer
+    assert "Cost of capital worksheet!I5" not in answer
+    assert "Which approach will you be using" not in answer
+    assert "Showing" in answer
+    assert str(MAX_WHERE_HITS) in answer

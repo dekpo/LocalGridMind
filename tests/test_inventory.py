@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.core.inventory import (
+    MAX_FORMULAS_PER_FILE,
     MAX_PROMPT_CHARS,
     PackInventory,
     build_pack_inventory,
@@ -178,6 +179,34 @@ def test_pack_json_roundtrip_keeps_wacc_formulas(tmp_path: Path) -> None:
     assert "Input sheet!B35" in cells
     assert "Cost of capital!B13" in cells
     assert restored.files[0].formula_total == pack.files[0].formula_total
+    assert [item.cell for item in restored.files[0].all_formulas] == [
+        item.cell for item in pack.files[0].all_formulas
+    ]
+
+
+def test_all_formulas_kept_when_prompt_list_is_capped(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    path = tmp_path / "many.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Sheet1"
+    sheet["A1"] = "Item"
+    for row in range(2, 52):
+        sheet[f"A{row}"] = f"=B{row}+1"
+    workbook.save(path)
+    workbook.close()
+
+    inventory = inspect_file(path)
+    assert inventory.formula_total == 50
+    assert len(inventory.all_formulas) == 50
+    assert len(inventory.formulas) == MAX_FORMULAS_PER_FILE
+    assert inventory.formulas[0].formula.startswith("=")
+    cells = {item.cell for item in inventory.all_formulas}
+    assert "Sheet1!A51" in cells
+    prompt = PackInventory(files=[inventory]).to_prompt()
+    assert "FORMULAS" in prompt
+    assert "50" in prompt
 
 
 def test_build_chat_prompt_forbids_invented_cells() -> None:
@@ -187,6 +216,9 @@ def test_build_chat_prompt_forbids_invented_cells() -> None:
     assert "Do not invent cell addresses" in text
     assert "Do not invent numeric answers" in text
     assert "Do not write Python" in text
+    assert "[[FORMULA:Sheet Name!A1]]" in text
+    assert "[[FORMULA:File.xlsx!A1]]" in text
+    assert "SUGGESTED FORMULA:" in text
 
 
 def test_unreadable_file_is_reported_in_english(tmp_path: Path) -> None:
