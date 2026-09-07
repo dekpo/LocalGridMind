@@ -130,6 +130,32 @@ def test_ingest_appends_inventory_correction_when_pack_is_attached(
     assert messages[0].content == stored["content"]
 
 
+def test_ingest_resolves_formula_ref_from_full_inventory(
+    tmp_path: Path,
+) -> None:
+    path = write_wacc_pack_xlsx(tmp_path / "wacc_pack.xlsx")
+    inventory = build_pack_inventory([path])
+    library = ConversationLibrary(tmp_path / "library.sqlite")
+    conversation = library.create_conversation()
+    pack = library.create_pack(
+        inventory.display_name(),
+        inventory.to_json(),
+        inventory.to_english(),
+        inventory.to_prompt(),
+    )
+    library.replace_conversation_pack(conversation.id, pack.id)
+    thread = empty_thread()
+    runtime = _IdleRuntime(
+        reply="Cost of capital uses [[FORMULA:Cost of capital!B13]]."
+    )
+
+    stored = ingest_finished_reply(thread, library, conversation.id, runtime)
+
+    assert stored is not None
+    assert "[[FORMULA:" not in stored["content"]
+    assert "Cost of capital!B13 → =B10*B11+B12" in stored["content"]
+
+
 class _FinishLlama:
     def __init__(self, model_path: str, **kwargs: object) -> None:
         self.model_path = model_path

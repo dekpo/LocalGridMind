@@ -5,6 +5,31 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 6.4 — Deterministic formula references (2026-09-07)
+
+The compact prompt sent to the local model stays capped. The app also
+keeps the full stored-formula index (`all_formulas`) in the pack JSON
+and uses it for lookup, grounding, and token resolution.
+
+After generate, `[[FORMULA:Sheet!A1]]` is replaced with the stored
+formula (exact match only). `[[FORMULA:File.xlsx!A1]]` is accepted when
+that A1 address is unique in that file; two sheets with the same A1
+fail closed. A missing cell is marked unverified and is never replaced
+by a nearby formula. Suggested Excel text stays allowed when labelled
+`SUGGESTED FORMULA:`. Raw `=` text from the model is not treated as a
+verified workbook formula.
+
+“Where is WACC / cost of capital” matches row labels and headers only
+(not the sheet name), ranks definition cells first, and lists at most
+12 hits. A named `Sheet!A1` in the question still quotes the inventory
+with no generate.
+
+Human checks: a 7B never emitted tokens and still invented paste-ready
+formulas; Qwen3.5-9B copied the Ginzu terminal-value formula correctly
+and labelled suggestions, but still invented a VLOOKUP on the linked
+folder. Facts named as `Sheet!A1` stay an app job. Tests use synthetic
+workbooks only.
+
 ### Phase 6.3 — Ground model replies (2026-09-07)
 
 A question that names a `Sheet!A1` cell is answered from the cached

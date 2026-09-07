@@ -140,6 +140,8 @@ class FileInventory:
     sheets: list[SheetInfo] = field(default_factory=list)
     named_ranges: list[NamedRangeInfo] = field(default_factory=list)
     formulas: list[FormulaInfo] = field(default_factory=list)
+    # Complete deterministic formula index. Not necessarily sent to the LLM.
+    all_formulas: list[FormulaInfo] = field(default_factory=list)
     links: list[ExternalLinkInfo] = field(default_factory=list)
     features: FeatureFlags = field(default_factory=FeatureFlags)
     issues: list[str] = field(default_factory=list)
@@ -204,17 +206,9 @@ def _file_from_dict(data: dict[str, Any]) -> FileInventory:
             )
             for item in data.get("named_ranges") or []
         ],
-        formulas=[
-            FormulaInfo(
-                cell=str(item.get("cell") or ""),
-                formula=str(item.get("formula") or ""),
-                external_books=[
-                    str(book) for book in item.get("external_books") or []
-                ],
-                label=str(item.get("label") or ""),
-                column_header=str(item.get("column_header") or ""),
-            )
-            for item in data.get("formulas") or []
+        formulas=[_formula_from_dict(item) for item in data.get("formulas") or []],
+        all_formulas=[
+            _formula_from_dict(item) for item in data.get("all_formulas") or []
         ],
         links=[
             ExternalLinkInfo(
@@ -229,6 +223,26 @@ def _file_from_dict(data: dict[str, Any]) -> FileInventory:
         unreadable=bool(data.get("unreadable")),
         formula_total=int(data.get("formula_total") or 0),
     )
+
+
+def _formula_from_dict(data: dict[str, Any]) -> FormulaInfo:
+    return FormulaInfo(
+        cell=str(data.get("cell") or ""),
+        formula=str(data.get("formula") or ""),
+        external_books=[str(book) for book in data.get("external_books") or []],
+        label=str(data.get("label") or ""),
+        column_header=str(data.get("column_header") or ""),
+    )
+
+
+def indexed_formulas(item: FileInventory) -> list[FormulaInfo]:
+    """Full deterministic list. Old packs fall back to the prompt subset."""
+    return item.all_formulas or item.formulas
+
+
+def uses_full_formula_index(pack: PackInventory) -> bool:
+    """True when at least one file persisted the complete formula index."""
+    return any(item.all_formulas for item in pack.files)
 
 
 def _sheet_from_dict(data: dict[str, Any]) -> SheetInfo:
@@ -417,10 +431,11 @@ def _inspect_excel(path: Path) -> FileInventory:
         kept_formulas = _follow_formula_targets(
             formulas, kept_formulas, MAX_FORMULAS_PER_FILE
         )
+        prompt_formulas = [_prompt_formula(item) for item in kept_formulas]
         if formula_total > MAX_FORMULAS_PER_FILE:
             issues.append(
                 f"{path.name} has {formula_total} stored formulas; "
-                f"listing {len(kept_formulas)} of {formula_total}."
+                f"listing {len(prompt_formulas)} of {formula_total}."
             )
         links = _links_from_formulas(formulas)
         for item in named:
@@ -434,7 +449,8 @@ def _inspect_excel(path: Path) -> FileInventory:
             kind=path.suffix.lower().lstrip("."),
             sheets=sheets,
             named_ranges=named,
-            formulas=kept_formulas,
+            formulas=prompt_formulas,
+            all_formulas=list(formulas),
             links=links,
             features=features,
             issues=issues,
@@ -507,7 +523,7 @@ def _inspect_worksheet(
         for col_idx, value in enumerate(values):
             if _is_formula(value):
                 cell = f"{worksheet.title}!{get_column_letter(col_idx + 1)}{row_idx}"
-                formula = _clip(str(value), MAX_FORMULA_CHARS)
+                formula = str(value)
                 header = headers[col_idx] if col_idx < len(headers) else ""
                 formulas.append(
                     FormulaInfo(
@@ -671,6 +687,20 @@ def _formula_bucket(item: FormulaInfo) -> int:
     if "!" in item.formula:
         return 3
     return 4
+
+
+def _prompt_formula(item: FormulaInfo) -> FormulaInfo:
+    """Clip formula text for the compact prompt list. Keep the stored original."""
+    clipped = _clip(item.formula, MAX_FORMULA_CHARS)
+    if clipped == item.formula:
+        return item
+    return FormulaInfo(
+        cell=item.cell,
+        formula=clipped,
+        external_books=list(item.external_books),
+        label=item.label,
+        column_header=item.column_header,
+    )
 
 
 def _select_formulas(

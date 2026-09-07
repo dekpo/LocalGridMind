@@ -8,6 +8,7 @@ from .inventory import (
     FormulaInfo,
     PackInventory,
     cell_address_key,
+    indexed_formulas,
     iter_sheet_cells,
 )
 
@@ -92,7 +93,7 @@ def _listed_indexes(
     multi = len(pack.files) > 1
     for item in pack.files:
         prefix = f"{item.filename} " if multi else ""
-        for formula in item.formulas:
+        for formula in indexed_formulas(item):
             pair = (prefix, formula)
             by_full.setdefault(cell_address_key(formula.cell), []).append(pair)
             by_a1.setdefault(_a1_key(formula.cell), []).append(pair)

@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 try:
+    from core.formula_refs import resolve_formula_refs_from_json
     from core.ground import ground_from_json
     from ui.chat_store import add_message
     from ui.library import ConversationLibrary
 except ImportError:  # pytest uses the repo root on sys.path
+    from src.core.formula_refs import resolve_formula_refs_from_json
     from src.core.ground import ground_from_json
     from src.ui.chat_store import add_message
     from src.ui.library import ConversationLibrary
@@ -57,7 +59,8 @@ def _ground_reply(
     inventory_json = getattr(pack, "inventory_json", None)
     if not inventory_json:
         return content
-    return ground_from_json(content, inventory_json)
+    resolved, _errors = resolve_formula_refs_from_json(content, inventory_json)
+    return ground_from_json(resolved, inventory_json)
 
 
 def _already_has_assistant(thread: list[dict], content: str) -> bool:

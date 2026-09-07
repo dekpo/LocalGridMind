@@ -5,7 +5,7 @@ systems, extracts data and spreadsheet logic, explains it, and can emit
 a simpler workbook. A local model drives the work. Users never touch
 Python or a terminal.
 
-This repository has completed **phase 6.3 (ground model replies)**.
+This repository has completed **phase 6.4 (deterministic formula references)**.
 Read `PRODUCT.md` for intent, feasibility, and limits. See
 `CHANGELOG.md` for what landed and `ROADMAP.md` for the phase plan.
 
@@ -41,18 +41,19 @@ triggers. They are not case-sensitive.
 3. **Where is this computed?** — the question contains `Where is` or
    `Where are`. Treat **WACC** and **cost of capital** as the same
    hunt. The app quotes matching stored formulas (cell + formula +
-   label). It only searches the formulas already listed in the
-   inventory (often 40 out of a much larger file).
+   label) from the full local formula index when that index is present.
+   It matches the row label or column header, not the sheet name, and
+   shows at most a short ranked list.
 4. **Which file does this workbook read?** — the question matches
    `Which file does … read` or `What file does … read`.
 5. **What does this cell do?** — the question names a `Sheet!A1` or
    `'Sheet name'!A1` address. The app quotes that stored formula
-   (cell + formula + label). If the cell is not in the listed set,
-   it says so. It does not open Excel again.
+   (cell + formula + label) from the full local formula index. If the
+   cell is not there, it says so. It does not open Excel again.
 
 If the question matches one of those five, the model is **not**
 called. That is intentional: the inventory is the source of truth
-for names, links, and listed cells.
+for names, links, and stored cells.
 
 `How is …`, `Explain …`, and `Suggest …` are **not** magic words.
 They usually go to the model because they do **not** match the list
@@ -72,11 +73,17 @@ to the local model. That path is for:
 - any other question that is not a fact lookup
 
 The model must not invent numbers in tokens, and it should not invent
-cell addresses that are not in the inventory. If it still **mis-copies
+cell addresses that are not in the inventory. When it refers to an
+existing formula it should cite `[[FORMULA:Sheet!A1]]` (or
+`[[FORMULA:File.xlsx!A1]]` when that A1 is unique in that file). The
+app fills in the stored formula. If the cite cannot be verified, the
+reply says so; the app does not guess a nearby cell. New Excel text
+must be labelled **SUGGESTED FORMULA**. If the model still **mis-copies
 a listed formula**, the app appends a short correction that quotes the
 stored formula. The model draft stays visible. Always check the
 inventory turn at the top of the chat before pasting anything into
-Excel.
+Excel. A local 7B often ignores the cite protocol; a 9B may follow it
+more often. Neither is the source of truth for workbook facts.
 
 If no model is loaded, those questions get a short notice to load
 one. They do not wait on a spinner.
@@ -123,13 +130,13 @@ Named range: `RateTable` → `Rates!$A$1:$C$3`.
 | `Where is WACC or the cost of capital computed?` | Inventory. Quotes B35 and B13 (and any other listed row whose label says cost of capital). |
 | `List the named ranges from the inventory.` | Inventory. `none` if there are none. |
 | `What does Input sheet!B35 do?` | Inventory. Quotes `='Cost of capital'!B13`. |
-| `How is terminal value calculated? Quote only a formula that is in the inventory.` | Model. Should quote `Valuation output!B18`. If it assigns a wrong formula to a listed cell, a correction quotes the stored one. |
+| `How is terminal value calculated? Quote only a formula that is in the inventory.` | Model. Should cite `Valuation output!B18`. The app resolves the stored formula. If it assigns a wrong formula to a listed cell, a correction quotes the stored one. |
 | `Suggest a paste-ready FCFF-from-EBIT formula only if the inventory shows that logic.` | Model. If the listed formulas do not show that logic, the honest answer is that it is not in the inventory. Do not paste a formula the model invented. |
 
 ### Practical rule
 
 - **Where / named ranges / external links / which file does X read / what does Sheet!A1 do** → trust the instant answer; it came from the file scan.
-- **How / explain / suggest** (no `Sheet!A1` in the question) → the model is drafting; a correction may appear if it mis-copies a listed cell. Reconcile with the inventory list before you change Excel.
+- **How / explain / suggest** (no `Sheet!A1` in the question) → the model is drafting; existing formulas should appear only after the app resolves a `[[FORMULA:…]]` cite. Reconcile with the inventory list before you change Excel.
 
 ## Requirements (developers only)
 
