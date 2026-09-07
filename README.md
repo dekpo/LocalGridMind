@@ -11,13 +11,116 @@ Read `PRODUCT.md` for intent, feasibility, and limits. See
 
 Attach a file or a folder of linked workbooks to the current chat.
 The app keeps a local copy and a compact inventory (schema, stored
-formulas, external links). Later questions reuse that cache. Named
-ranges, external links, and “where is this computed” are answered
-from that inventory without calling the local model. Other questions
-still use the compact prompt. The model remains a hidden generator of
-analysis code and Excel formula text. It must not invent numeric
-answers or cell addresses that are not in the inventory. A Workbook
+formulas, external links). Later questions reuse that cache. A Workbook
 library (reuse a pack across chats) comes later.
+
+## Asking questions
+
+There are **two kinds of replies**. The app chooses. You do not flip a
+switch. English questions only (the chat is English).
+
+| What you see | What happened |
+| --- | --- |
+| Answer appears at once. No spinner. No “Generated in …” | The app quoted the **workbook inventory** it built when you attached the files. The local model is not used, even if it is Ready. |
+| Spinner, wait copy, then “Generated in 2 min …” | The **local model** wrote the reply. You must click **Load model** and wait for Ready first. |
+
+**Load model is not required** for inventory questions. It **is**
+required for explanations and suggested formulas.
+
+### When the inventory answers (no model)
+
+A workbook must already be attached to **this** chat. The app then
+looks for a **fact** question. These English patterns are the
+triggers. They are not case-sensitive.
+
+1. **Named ranges** — the question contains `named range` or
+   `named ranges`.
+2. **Links to other workbooks** — the question contains
+   `external link`, `external links`, `external workbook link`,
+   or `workbook links`.
+3. **Where is this computed?** — the question contains `Where is` or
+   `Where are`. Treat **WACC** and **cost of capital** as the same
+   hunt. The app quotes matching stored formulas (cell + formula +
+   label). It only searches the formulas already listed in the
+   inventory (often 40 out of a much larger file).
+4. **Which file does this workbook read?** — the question matches
+   `Which file does … read` or `What file does … read`.
+
+If the question matches one of those four, the model is **not**
+called. That is intentional: the inventory is the source of truth
+for names, links, and “where is this cell”.
+
+`How is …`, `Explain …`, and `Suggest …` are **not** magic words.
+They usually go to the model because they do **not** match the list
+above. The opposite also holds: `Where is terminal value computed?`
+is an inventory question; `How is terminal value calculated?` is a
+model question.
+
+### When the model answers (spinner)
+
+If the question is **not** one of the four fact patterns, and a model
+is Ready, the app sends a short inventory extract plus your question
+to the local model. That path is for:
+
+- explaining a listed formula in plain English
+- suggesting Excel formula text you can paste
+- any other question that is not a fact lookup
+
+The model must not invent numbers in tokens, and it should not invent
+cell addresses that are not in the inventory. Human tests show it
+**can still mis-copy a listed formula**. Always check the inventory
+turn at the top of the chat before pasting anything into Excel.
+
+If no model is loaded, those questions get a short notice to load
+one. They do not wait on a spinner.
+
+### Tiny example (two linked files)
+
+Imagine this pack:
+
+**Books.xlsx** (sheet `Books`)
+
+| Book | Name |
+| --- | --- |
+| A | Alpha |
+| B | Bravo |
+
+**Rates.xlsx** (sheet `Rates`)
+
+| Date | Book | Rate | (column E) |
+| --- | --- | --- | --- |
+| 2026-01-01 | A | 1.5 | `=[Books.xlsx]Books!B2` |
+
+Named range: `RateTable` → `Rates!$A$1:$C$3`.
+
+| You type | Path | Typical reply |
+| --- | --- | --- |
+| `Which file does Rates read, and is it in this pack?` | Inventory, instant | Rates.xlsx reads **Books.xlsx** from `Rates!E2`. That file is in this pack. |
+| `List the named ranges from the inventory.` | Inventory, instant | `RateTable` → `Rates!$A$1:$C$3` |
+| `Are there external workbook links in the inventory?` | Inventory, instant | `Rates!E2` reads **Books.xlsx** (in this pack) |
+| `Where is the rate name pulled from?` | Inventory if it matches `Where is …` | Quoted stored formula if the label/cell matches; otherwise not in the listed set |
+| `Explain the Rates!E2 formula in plain English.` | Model, spinner | Should describe the link to `Books!B2`. Compare with the inventory line. |
+| `Suggest a paste-ready formula that looks up a name the same way Rates already does.` | Model, spinner | Prefer a formula that quotes `=[Books.xlsx]Books!B2`. If the model writes a new `VLOOKUP` instead, treat it as a draft and check the inventory. |
+
+### Tiny example (cost of capital on one sheet)
+
+| Cell | Formula or label |
+| --- | --- |
+| `Input sheet!B35` | `='Cost of capital'!B13` — Initial cost of capital |
+| `Cost of capital!B13` | `=B10*B11+B12` — Cost of capital |
+| `Valuation output!B18` | `=B16/(B17-M2)` — Terminal value |
+
+| You type | Path |
+| --- | --- |
+| `Where is WACC or the cost of capital computed?` | Inventory. Quotes B35 and B13 (and any other listed row whose label says cost of capital). |
+| `List the named ranges from the inventory.` | Inventory. `none` if there are none. |
+| `How is terminal value calculated? Quote only a formula that is in the inventory.` | Model. Should quote `Valuation output!B18`. |
+| `Suggest a paste-ready FCFF-from-EBIT formula only if the inventory shows that logic.` | Model. If the listed formulas do not show that logic, the honest answer is that it is not in the inventory. Do not paste a formula the model invented. |
+
+### Practical rule
+
+- **Where / named ranges / external links / which file does X read** → trust the instant answer; it came from the file scan.
+- **How / explain / suggest / what does this cell do** → the model is drafting; reconcile with the inventory list before you change Excel.
 
 ## Requirements (developers only)
 

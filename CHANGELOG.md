@@ -9,8 +9,12 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 Named ranges, external workbook links, and “where is WACC / cost of capital
 computed” are answered from the cached pack JSON. Those turns persist
-without loading a model. Other questions still use the Phase 6.1 prompt.
-Tests use synthetic workbooks only.
+without loading a model, including when a model is already Ready.
+Other questions still use the Phase 6.1 prompt. `README.md` explains
+the two reply paths in analyst language (what to type, what is instant,
+what waits on the model). Tests use synthetic workbooks only. Human
+checks on a large valuation file and a two-file folder: fact lookup
+holds; the 7B can still mis-copy a listed formula on explain / suggest.
 
 ### Phase 6.1 — Honest inventory prompt (2026-09-06)
 
