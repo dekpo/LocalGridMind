@@ -34,6 +34,43 @@ _INDEXED_BOOK = re.compile(r"^\d+$")
 _SHEET_CELL = re.compile(
     r"(?:'([^']+)'|([A-Za-z0-9._ ]+))!\$?([A-Z]{1,3})\$?(\d+)"
 )
+_BANG_A1 = re.compile(r"!\$?([A-Za-z]{1,3})\$?(\d+)\b", re.I)
+_SHEET_WORD = re.compile(r"([A-Za-z][A-Za-z0-9._]*)\s*$")
+_SHEET_STOP = frozenset(
+    {
+        "what",
+        "does",
+        "do",
+        "how",
+        "where",
+        "which",
+        "who",
+        "is",
+        "are",
+        "please",
+        "explain",
+        "suggest",
+        "list",
+        "quote",
+        "named",
+        "file",
+        "for",
+        "from",
+        "this",
+        "that",
+        "the",
+        "a",
+        "an",
+        "in",
+        "on",
+        "to",
+        "and",
+        "or",
+        "your",
+        "my",
+        "me",
+    }
+)
 _FINANCE_TERMS = (
     "wacc",
     "cost of capital",
@@ -218,6 +255,82 @@ def _sheet_from_dict(data: dict[str, Any]) -> SheetInfo:
 def is_workbook_name(name: str) -> bool:
     suffix = Path(str(name).replace("\\", "/")).suffix.lower()
     return suffix in ALLOWED_SUFFIXES
+
+
+def parse_cell_addresses(text: str) -> list[str]:
+    """Sheet!A1 addresses in reading order. Quotes around the sheet are optional."""
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for _start, _end, cell in iter_sheet_cells(text):
+        key = cell_address_key(cell)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(cell)
+    return ordered
+
+
+def iter_sheet_cells(text: str) -> list[tuple[int, int, str]]:
+    """Return (start, end, Sheet!A1) for each qualified address in `text`."""
+    found: list[tuple[int, int, str]] = []
+    for match in _BANG_A1.finditer(text):
+        sheet = _sheet_before(text, match.start())
+        if not sheet:
+            continue
+        cell = _format_cell(sheet, match.group(1), match.group(2))
+        start = _cell_span_start(text, match.start(), sheet)
+        found.append((start, match.end(), cell))
+    return found
+
+
+def _sheet_before(text: str, bang_at: int) -> str:
+    prefix = text[:bang_at].rstrip()
+    if prefix.endswith("'"):
+        close = len(prefix) - 1
+        open_at = prefix.rfind("'", 0, close)
+        if open_at == -1:
+            return ""
+        return prefix[open_at + 1 : close].strip()
+    words: list[str] = []
+    rest = prefix
+    while rest and len(words) < 6:
+        match = _SHEET_WORD.search(rest)
+        if not match:
+            break
+        word = match.group(1)
+        if word.casefold() in _SHEET_STOP:
+            break
+        words.append(word)
+        rest = rest[: match.start()].rstrip()
+    if not words:
+        return ""
+    words.reverse()
+    return " ".join(words)
+
+
+def _cell_span_start(text: str, bang_at: int, sheet: str) -> int:
+    prefix = text[:bang_at]
+    quoted = f"'{sheet}'"
+    quoted_at = prefix.rfind(quoted)
+    if quoted_at != -1 and prefix[quoted_at:].rstrip() == quoted:
+        return quoted_at
+    plain_at = prefix.rfind(sheet)
+    if plain_at != -1:
+        return plain_at
+    return bang_at
+
+
+def cell_address_key(cell: str) -> str:
+    """Case-insensitive Sheet!A1 key. Drops $ and quotes around the sheet."""
+    text = " ".join(str(cell).replace("'", "").split())
+    if "!" not in text:
+        return text.replace("$", "").casefold()
+    sheet, addr = text.rsplit("!", 1)
+    return f"{sheet.strip().casefold()}!{addr.replace('$', '').casefold()}"
+
+
+def _format_cell(sheet: str, column: str, row: str) -> str:
+    return f"{sheet.strip()}!{column.upper()}{int(row)}"
 
 
 def build_pack_inventory(paths: list[Path]) -> PackInventory:

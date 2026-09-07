@@ -5,6 +5,14 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 6.3 — Ground model replies (2026-09-07)
+
+A question that names a `Sheet!A1` cell is answered from the cached
+inventory (cell + stored formula + label), including when a model is
+Ready. After a generate, if the reply assigns a different formula to a
+listed cell, a short English correction is appended; the model draft is
+not rewritten. Tests use synthetic workbooks only.
+
 ### Phase 6.2 — Inventory lookup (2026-09-06)
 
 Named ranges, external workbook links, and “where is WACC / cost of capital

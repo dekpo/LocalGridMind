@@ -18,6 +18,7 @@ text. It must not invent numeric answers.
 | 6 Workbook intelligence | Implemented | Attach a file or folder pack to the **current** Recents chat. Local copy + one-shot inventory (schema, stored formulas, external links). Later questions in that thread reuse the cache. Native chat paperclip + a separate folder picker. No interpreter. |
 | 6.1 Honest inventory prompt | Implemented | Compact prompt lists named ranges, links (or none), and stored formulas **before** sheet noise. Persist a finished reply if the page reconnects. Human tests: extraction holds; a 7B still paraphrases facts. |
 | 6.2 Inventory lookup | Implemented | The app answers named-range, external-link, and “where is this computed” questions from the structured inventory. Human-verified with the model unloaded and Ready. Fact lookup holds; the 7B can still mis-copy listed formulas on explain / suggest. |
+| 6.3 Ground model replies | Implemented | A named `Sheet!A1` is quoted from the inventory with no generate. After a generate, a listed cell that was given the wrong formula gets a short correction. Any workbook; no file-specific hard-coding. |
 | 6b Workbook library | Later | Sidebar Library under New chat. Reuse packs across conversations. Include / exclude for the active chat only. Not a global always-on corpus. |
 | 7 Hidden interpreter | Planned | Restricted execution of generated Pandas; users never see Python |
 | 8 Export | Planned | Cleaner `.xlsx` / `.csv` download |

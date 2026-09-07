@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.core.inventory import build_pack_inventory
 from src.llm.runtime import EMPTY_REPLY_NOTICE, ModelRuntime
 from src.ui.chat_store import add_message, empty_thread
 from src.ui.library import ConversationLibrary
 from src.ui.reply_ingest import ingest_finished_reply
+from tests.workbook_fixtures import write_wacc_pack_xlsx
 
 
 class _IdleRuntime:
@@ -95,6 +97,37 @@ def test_consume_finished_reply_clears_runtime_slot(tmp_path: Path) -> None:
     assert runtime.last_reply is None
     assert runtime.reply_error is None
     assert runtime.consume_finished_reply() == (None, None)
+
+
+def test_ingest_appends_inventory_correction_when_pack_is_attached(
+    tmp_path: Path,
+) -> None:
+    path = write_wacc_pack_xlsx(tmp_path / "wacc_pack.xlsx")
+    inventory = build_pack_inventory([path])
+    library = ConversationLibrary(tmp_path / "library.sqlite")
+    conversation = library.create_conversation()
+    pack = library.create_pack(
+        inventory.display_name(),
+        inventory.to_json(),
+        inventory.to_english(),
+        inventory.to_prompt(),
+    )
+    library.replace_conversation_pack(conversation.id, pack.id)
+    thread = empty_thread()
+    runtime = _IdleRuntime(
+        reply="Cost of capital!B13 is `=1+1` according to this draft."
+    )
+
+    stored = ingest_finished_reply(thread, library, conversation.id, runtime)
+
+    assert stored is not None
+    assert stored["content"].startswith(
+        "Cost of capital!B13 is `=1+1` according to this draft."
+    )
+    assert "=B10*B11+B12" in stored["content"]
+    assert "not `=1+1`" in stored["content"]
+    messages = library.list_messages(conversation.id)
+    assert messages[0].content == stored["content"]
 
 
 class _FinishLlama:

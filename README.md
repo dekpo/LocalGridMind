@@ -5,7 +5,7 @@ systems, extracts data and spreadsheet logic, explains it, and can emit
 a simpler workbook. A local model drives the work. Users never touch
 Python or a terminal.
 
-This repository has completed **phase 6.2 (inventory lookup)**.
+This repository has completed **phase 6.3 (ground model replies)**.
 Read `PRODUCT.md` for intent, feasibility, and limits. See
 `CHANGELOG.md` for what landed and `ROADMAP.md` for the phase plan.
 
@@ -45,20 +45,25 @@ triggers. They are not case-sensitive.
    inventory (often 40 out of a much larger file).
 4. **Which file does this workbook read?** — the question matches
    `Which file does … read` or `What file does … read`.
+5. **What does this cell do?** — the question names a `Sheet!A1` or
+   `'Sheet name'!A1` address. The app quotes that stored formula
+   (cell + formula + label). If the cell is not in the listed set,
+   it says so. It does not open Excel again.
 
-If the question matches one of those four, the model is **not**
+If the question matches one of those five, the model is **not**
 called. That is intentional: the inventory is the source of truth
-for names, links, and “where is this cell”.
+for names, links, and listed cells.
 
 `How is …`, `Explain …`, and `Suggest …` are **not** magic words.
 They usually go to the model because they do **not** match the list
-above. The opposite also holds: `Where is terminal value computed?`
-is an inventory question; `How is terminal value calculated?` is a
-model question.
+above — unless the question also names a `Sheet!A1` cell, in which
+case the inventory answers. The opposite also holds: `Where is
+terminal value computed?` is an inventory question; `How is terminal
+value calculated?` is a model question.
 
 ### When the model answers (spinner)
 
-If the question is **not** one of the four fact patterns, and a model
+If the question is **not** one of the five fact patterns, and a model
 is Ready, the app sends a short inventory extract plus your question
 to the local model. That path is for:
 
@@ -67,9 +72,11 @@ to the local model. That path is for:
 - any other question that is not a fact lookup
 
 The model must not invent numbers in tokens, and it should not invent
-cell addresses that are not in the inventory. Human tests show it
-**can still mis-copy a listed formula**. Always check the inventory
-turn at the top of the chat before pasting anything into Excel.
+cell addresses that are not in the inventory. If it still **mis-copies
+a listed formula**, the app appends a short correction that quotes the
+stored formula. The model draft stays visible. Always check the
+inventory turn at the top of the chat before pasting anything into
+Excel.
 
 If no model is loaded, those questions get a short notice to load
 one. They do not wait on a spinner.
@@ -99,8 +106,9 @@ Named range: `RateTable` → `Rates!$A$1:$C$3`.
 | `List the named ranges from the inventory.` | Inventory, instant | `RateTable` → `Rates!$A$1:$C$3` |
 | `Are there external workbook links in the inventory?` | Inventory, instant | `Rates!E2` reads **Books.xlsx** (in this pack) |
 | `Where is the rate name pulled from?` | Inventory if it matches `Where is …` | Quoted stored formula if the label/cell matches; otherwise not in the listed set |
-| `Explain the Rates!E2 formula in plain English.` | Model, spinner | Should describe the link to `Books!B2`. Compare with the inventory line. |
-| `Suggest a paste-ready formula that looks up a name the same way Rates already does.` | Model, spinner | Prefer a formula that quotes `=[Books.xlsx]Books!B2`. If the model writes a new `VLOOKUP` instead, treat it as a draft and check the inventory. |
+| `What does Rates!E2 do?` | Inventory, instant | `Rates!E2`: `=[Books.xlsx]Books!B2` |
+| `Explain the Rates!E2 formula in plain English.` | Inventory, instant | Same quote: the question names `Rates!E2`. |
+| `Suggest a paste-ready formula that looks up a name the same way Rates already does.` | Model, spinner | Prefer a formula that quotes `=[Books.xlsx]Books!B2`. If the model assigns a different formula to a listed cell, a correction appears under the draft. |
 
 ### Tiny example (cost of capital on one sheet)
 
@@ -114,13 +122,14 @@ Named range: `RateTable` → `Rates!$A$1:$C$3`.
 | --- | --- |
 | `Where is WACC or the cost of capital computed?` | Inventory. Quotes B35 and B13 (and any other listed row whose label says cost of capital). |
 | `List the named ranges from the inventory.` | Inventory. `none` if there are none. |
-| `How is terminal value calculated? Quote only a formula that is in the inventory.` | Model. Should quote `Valuation output!B18`. |
+| `What does Input sheet!B35 do?` | Inventory. Quotes `='Cost of capital'!B13`. |
+| `How is terminal value calculated? Quote only a formula that is in the inventory.` | Model. Should quote `Valuation output!B18`. If it assigns a wrong formula to a listed cell, a correction quotes the stored one. |
 | `Suggest a paste-ready FCFF-from-EBIT formula only if the inventory shows that logic.` | Model. If the listed formulas do not show that logic, the honest answer is that it is not in the inventory. Do not paste a formula the model invented. |
 
 ### Practical rule
 
-- **Where / named ranges / external links / which file does X read** → trust the instant answer; it came from the file scan.
-- **How / explain / suggest / what does this cell do** → the model is drafting; reconcile with the inventory list before you change Excel.
+- **Where / named ranges / external links / which file does X read / what does Sheet!A1 do** → trust the instant answer; it came from the file scan.
+- **How / explain / suggest** (no `Sheet!A1` in the question) → the model is drafting; a correction may appear if it mis-copies a listed cell. Reconcile with the inventory list before you change Excel.
 
 ## Requirements (developers only)
 

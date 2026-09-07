@@ -5,12 +5,18 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .inventory import FormulaInfo, PackInventory
+from .inventory import (
+    FormulaInfo,
+    PackInventory,
+    cell_address_key,
+    parse_cell_addresses,
+)
 
 NAMED_RANGES = "named_ranges"
 EXTERNAL_LINKS = "external_links"
 WHERE_COMPUTED = "where_computed"
 FILE_READS = "file_reads"
+CELL_QUOTE = "cell_quote"
 
 _NAMED = re.compile(r"\bnamed\s+ranges?\b", re.I)
 _EXTERNAL = re.compile(
@@ -49,6 +55,8 @@ def classify_inventory_intent(question: str) -> str | None:
         if topic is None and not _has_wacc_terms(text):
             return None
         return WHERE_COMPUTED
+    if parse_cell_addresses(text):
+        return CELL_QUOTE
     return None
 
 
@@ -67,6 +75,8 @@ def answer_inventory_question(
         return _answer_file_reads(question, pack)
     if intent == WHERE_COMPUTED:
         return _answer_where_computed(question, pack)
+    if intent == CELL_QUOTE:
+        return _answer_cell_quote(question, pack)
     return None
 
 
@@ -175,6 +185,56 @@ def _answer_where_computed(question: str, pack: PackInventory) -> str:
             "These matches are from that listed set."
         )
     return text
+
+
+def _answer_cell_quote(question: str, pack: PackInventory) -> str:
+    addresses = parse_cell_addresses(question)
+    listed, total = _formula_counts(pack)
+    index = _formulas_by_cell(pack)
+    quoted: list[str] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for address in addresses:
+        matches = index.get(cell_address_key(address), [])
+        if not matches:
+            missing.append(address)
+            continue
+        for prefix, formula in matches:
+            key = f"{prefix}{formula.cell}"
+            if key in seen:
+                continue
+            seen.add(key)
+            label = f" — {formula.label}" if formula.label else ""
+            quoted.append(f"`{prefix}{formula.cell}`: `{formula.formula}`{label}")
+    parts: list[str] = []
+    if quoted:
+        if len(quoted) == 1:
+            parts.append(quoted[0])
+        else:
+            parts.append("These stored formulas match the cells in your question:")
+            parts.extend(f"- {line}" for line in quoted)
+    for address in missing:
+        if total > listed:
+            parts.append(
+                f"`{address}` is not in the listed formulas ({listed} of {total})."
+            )
+        else:
+            parts.append(f"`{address}` is not in the inventory.")
+    return "\n\n".join(parts)
+
+
+def _formulas_by_cell(
+    pack: PackInventory,
+) -> dict[str, list[tuple[str, FormulaInfo]]]:
+    index: dict[str, list[tuple[str, FormulaInfo]]] = {}
+    multi = len(pack.files) > 1
+    for item in pack.files:
+        prefix = f"{item.filename} " if multi else ""
+        for formula in item.formulas:
+            index.setdefault(cell_address_key(formula.cell), []).append(
+                (prefix, formula)
+            )
+    return index
 
 
 def _search_terms(question: str) -> tuple[str, ...]:
