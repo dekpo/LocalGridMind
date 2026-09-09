@@ -23,7 +23,7 @@ text. It must not invent numeric answers.
 | 6b Workbook library | Later | Sidebar Library under New chat. Reuse packs across conversations. Include / exclude for the active chat only. Not a global always-on corpus. |
 | 7 Hidden interpreter | Planned | Restricted execution of generated Pandas; users never see Python |
 | 8 Export | Planned | Cleaner `.xlsx` / `.csv` download |
-| 9 Portable package | Planned | `LocalGridMind.exe` + sibling `models/` (not a 9 GB single exe) |
+| 9 Portable package | Later | Final product: `LocalGridMind.exe` + sibling `models/`. Closed beta: zip `release/ChatWithExcelFile/` from `tools/beta/assemble.bat`. |
 
 Phase 6 keeps workbooks on the **current** conversation: upload once,
 inventory once, ask many times. A later Library step (6b) can reuse

@@ -1,8 +1,10 @@
 """Smoke tests for GGUF discovery. No large model files are required."""
 
+import sys
 from pathlib import Path
 
 from src.config import (
+    get_project_root,
     CHAT_MAX_TOKENS,
     CHATS_DB_PATH,
     CHATS_DIR,
@@ -66,3 +68,13 @@ def test_reasoning_time_labels_map_to_hidden_token_budgets() -> None:
 
 def test_unknown_reasoning_time_label_uses_default_budget() -> None:
     assert resolve_reasoning_tokens("not a label") == CHAT_MAX_TOKENS
+
+
+def test_get_project_root_uses_exe_folder_when_frozen(
+    monkeypatch, tmp_path: Path
+) -> None:
+    exe = tmp_path / "LocalGridMind.exe"
+    exe.write_bytes(b"x")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    assert get_project_root() == tmp_path
