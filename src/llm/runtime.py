@@ -12,9 +12,23 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from config import CHAT_MAX_TOKENS, N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
+    from config import (
+        CHAT_MAX_TOKENS,
+        N_BATCH,
+        N_CTX,
+        N_GPU_LAYERS,
+        N_THREADS,
+        get_project_root,
+    )
 except ImportError:  # pytest uses the repo root on sys.path
-    from src.config import CHAT_MAX_TOKENS, N_BATCH, N_CTX, N_GPU_LAYERS, N_THREADS
+    from src.config import (
+        CHAT_MAX_TOKENS,
+        N_BATCH,
+        N_CTX,
+        N_GPU_LAYERS,
+        N_THREADS,
+        get_project_root,
+    )
 
 LlamaFactory = Callable[..., Any]
 
@@ -74,17 +88,27 @@ def explain_load_error(exc: BaseException) -> str:
     text = str(exc) or exc.__class__.__name__
     lowered = text.lower()
     win_code = getattr(exc, "winerror", None)
-    if win_code == 4551 or "4551" in text or "contrôle d’application" in lowered:
+    blocked = (
+        win_code == 4551
+        or "4551" in text
+        or "0xc0e90002" in lowered
+        or "contrôle d’application" in lowered
+        or "failed to load shared library" in lowered
+        or "llama.dll" in lowered
+        or "ggml.dll" in lowered
+        or "bad image" in lowered
+        or "image incorrecte" in lowered
+    )
+    if blocked:
+        root = get_project_root()
         return (
-            "Windows blocked the local model engine (application control, "
-            "error 4551). Allow llama.dll for this app in Windows Security, "
-            "or turn off Smart App Control, then load the model again. "
+            "Windows blocked the local model engine. "
+            "In Windows Security, add this folder as an exclusion: "
+            f"{root}. "
+            "If a Bad Image dialog appears, turn off Smart App Control "
+            "(Windows Security, App and browser control), then close "
+            "the app and click Load model again. "
             "This is a Windows policy, not a problem with the model file."
-        )
-    if "failed to load shared library" in lowered or "llama.dll" in lowered:
-        return (
-            "Windows could not start the local model engine. "
-            "Check Windows Security, then try Load model again."
         )
     return text
 
@@ -145,6 +169,7 @@ class ModelRuntime:
         self._generating = False
         self._generate_started_at: float | None = None
         self._last_generate_seconds: float | None = None
+        self._last_generate_model: str | None = None
         self._last_reply: str | None = None
         self._reply_error: str | None = None
         self._titling = False
@@ -229,6 +254,21 @@ class ModelRuntime:
             return self._last_generate_seconds
 
     @property
+    def last_generate_model(self) -> str | None:
+        """Stem of the GGUF that produced the last generate, or None."""
+        with self._lock:
+            return self._last_generate_model
+
+    @property
+    def loaded_model_name(self) -> str | None:
+        """Filename stem of the GGUF currently in memory, or None."""
+        with self._lock:
+            path = self._loaded_path
+        if path is None:
+            return None
+        return path.stem
+
+    @property
     def is_cancel_requested(self) -> bool:
         with self._lock:
             return self._cancel_generate
@@ -236,7 +276,8 @@ class ModelRuntime:
     def consume_finished_reply(self) -> tuple[str | None, float | None]:
         """Take a finished generate so a reconnect can still persist it.
 
-        Clears last_reply / reply_error. Leaves last_generate_seconds.
+        Clears last_reply / reply_error. Leaves last_generate_seconds
+        and last_generate_model.
         Returns (None, None) while generating or when nothing is waiting.
         """
         with self._lock:
@@ -331,6 +372,9 @@ class ModelRuntime:
             self._cancel_generate = False
             self._generate_started_at = time.monotonic()
             self._last_generate_seconds = None
+            self._last_generate_model = (
+                self._loaded_path.stem if self._loaded_path is not None else None
+            )
             self._last_reply = None
             self._reply_error = None
         worker = threading.Thread(
@@ -382,6 +426,8 @@ class ModelRuntime:
         started = self._generate_started_at
         if started is not None:
             self._last_generate_seconds = max(0.0, time.monotonic() - started)
+        if self._last_generate_model is None and self._loaded_path is not None:
+            self._last_generate_model = self._loaded_path.stem
         self._generating = False
         self._generate_started_at = None
         self._last_reply = reply
@@ -483,6 +529,7 @@ class ModelRuntime:
         self._generating = False
         self._generate_started_at = None
         self._last_generate_seconds = None
+        self._last_generate_model = None
         self._last_reply = None
         self._reply_error = None
         self._cancel_generate = False

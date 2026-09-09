@@ -108,10 +108,14 @@ def test_append_message_stores_elapsed_seconds(tmp_path: Path) -> None:
         "assistant",
         "Ready.",
         elapsed_seconds=95.0,
+        model_name="Mistral-7B-Instruct-v0.3-Q5_K_M",
     )
     stored = library.list_messages(conversation.id)[0]
     assert stored.elapsed_seconds == 95.0
-    assert stored.as_thread_item()["elapsed_seconds"] == 95.0
+    assert stored.model_name == "Mistral-7B-Instruct-v0.3-Q5_K_M"
+    item = stored.as_thread_item()
+    assert item["elapsed_seconds"] == 95.0
+    assert item["model_name"] == "Mistral-7B-Instruct-v0.3-Q5_K_M"
 
 
 def test_delete_conversation_removes_messages(tmp_path: Path) -> None:
@@ -156,8 +160,49 @@ def test_migrates_elapsed_seconds_on_existing_schema(tmp_path: Path) -> None:
         conn.close()
 
     library = ConversationLibrary(db_path)
-    library.append_message(1, "assistant", "Hi", elapsed_seconds=12)
-    assert library.list_messages(1)[0].elapsed_seconds == 12.0
+    library.append_message(
+        1,
+        "assistant",
+        "Hi",
+        elapsed_seconds=12,
+        model_name="LFM2.5-8B-A1B-Q5_K_M",
+    )
+    stored = library.list_messages(1)[0]
+    assert stored.elapsed_seconds == 12.0
+    assert stored.model_name == "LFM2.5-8B-A1B-Q5_K_M"
+
+
+def test_migrates_model_name_on_existing_schema(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy_elapsed.sqlite"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                elapsed_seconds REAL
+            );
+            INSERT INTO conversations (title, created_at, updated_at)
+            VALUES ('Legacy', '2026-09-05T00:00:00+00:00', '2026-09-05T00:00:00+00:00');
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    library = ConversationLibrary(db_path)
+    library.append_message(1, "assistant", "Hi", model_name="Qwen3.5-9B-Q5_K_M")
+    assert library.list_messages(1)[0].model_name == "Qwen3.5-9B-Q5_K_M"
 
 
 def test_unknown_conversation_raises(tmp_path: Path) -> None:

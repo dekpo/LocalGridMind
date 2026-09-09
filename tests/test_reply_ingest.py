@@ -20,11 +20,13 @@ class _IdleRuntime:
         error: str | None = None,
         elapsed: float | None = 1.5,
         generating: bool = False,
+        model_name: str | None = None,
     ) -> None:
         self._reply = reply
         self._error = error
         self._elapsed = elapsed
         self.is_generating = generating
+        self.last_generate_model = model_name
 
     def consume_finished_reply(self) -> tuple[str | None, float | None]:
         if self.is_generating:
@@ -44,7 +46,10 @@ def test_ingest_persists_finished_reply_without_awaiting_flag(
     conversation = library.create_conversation()
     thread = empty_thread()
     add_message(thread, "user", "Where is WACC?")
-    runtime = _IdleRuntime(reply="Input sheet!B35 points at Cost of capital!B13.")
+    runtime = _IdleRuntime(
+        reply="Input sheet!B35 points at Cost of capital!B13.",
+        model_name="Mistral-7B-Instruct-v0.3-Q5_K_M",
+    )
 
     stored = ingest_finished_reply(thread, library, conversation.id, runtime)
 
@@ -52,10 +57,12 @@ def test_ingest_persists_finished_reply_without_awaiting_flag(
     assert stored["role"] == "assistant"
     assert "B35" in stored["content"]
     assert stored["elapsed_seconds"] == 1.5
+    assert stored["model_name"] == "Mistral-7B-Instruct-v0.3-Q5_K_M"
     messages = library.list_messages(conversation.id)
     assert len(messages) == 1
     assert messages[0].role == "assistant"
     assert "B35" in messages[0].content
+    assert messages[0].model_name == "Mistral-7B-Instruct-v0.3-Q5_K_M"
     assert ingest_finished_reply(thread, library, conversation.id, runtime) is None
 
 
@@ -94,6 +101,7 @@ def test_consume_finished_reply_clears_runtime_slot(tmp_path: Path) -> None:
     content, elapsed = runtime.consume_finished_reply()
     assert content
     assert elapsed is not None
+    assert runtime.last_generate_model == "demo"
     assert runtime.last_reply is None
     assert runtime.reply_error is None
     assert runtime.consume_finished_reply() == (None, None)

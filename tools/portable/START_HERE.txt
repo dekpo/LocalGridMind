@@ -1,0 +1,35 @@
+LocalGridMind — first launch on a test PC
+
+Windows 11 Smart App Control often blocks the local model engine
+the first time. That is a Windows policy, not a broken model file.
+
+Do this once:
+
+1. If you received a ZIP
+   Right-click the ZIP → Properties → tick Unblock → OK.
+   Extract the whole folder. Do not run the exe from inside the ZIP.
+
+2. Put the folder somewhere simple, for example C:\LocalGridMind
+
+3. Turn off Smart App Control (closed beta)
+   Start menu → Windows Security
+   → App & browser control
+   → Smart App Control → Off
+   Windows may warn this choice is hard to undo. That is expected
+   on a test PC.
+
+   Then also add this folder as an exclusion:
+   Windows Security → Virus & threat protection → Manage settings
+   → Exclusions → Add an exclusion → Folder
+   Choose the folder that contains LocalGridMind.exe.
+
+4. Start the app
+   Double-click LocalGridMind.exe (or LocalGridMind.cmd).
+   Leave the black console open.
+   Choose the model → Load model.
+   The first load can take several minutes.
+
+If Windows shows a Bad Image dialog, close it, complete step 3,
+then start the app again.
+
+To stop: close the console window.

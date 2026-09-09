@@ -169,10 +169,23 @@ def test_explain_load_error_maps_windows_4551() -> None:
     )
     exc.winerror = 4551
     message = explain_load_error(exc)
-    assert "4551" in message
-    assert "Windows" in message
-    assert "llama.dll" in message
+    assert "Windows blocked the local model engine" in message
+    assert "exclusion" in message
     assert "model file" in message
+
+
+def test_explain_load_error_maps_generic_dll_block() -> None:
+    exc = OSError("Failed to load shared library 'llama.dll'")
+    message = explain_load_error(exc)
+    assert "Windows blocked the local model engine" in message
+    assert "exclusion" in message
+
+
+def test_explain_load_error_maps_bad_image_policy() -> None:
+    exc = OSError("Bad Image 0xc0e90002 ggml.dll")
+    message = explain_load_error(exc)
+    assert "Smart App Control" in message
+    assert "exclusion" in message
 
 
 def test_load_error_sets_status(tmp_path: Path) -> None:
@@ -289,6 +302,8 @@ def test_start_generate_stores_reply(tmp_path: Path) -> None:
     assert "The model is ready." in runtime.last_reply
     assert runtime.last_generate_seconds is not None
     assert runtime.last_generate_seconds >= 0.0
+    assert runtime.last_generate_model == "demo"
+    assert runtime.loaded_model_name == "demo"
 
 
 def test_start_title_generate_does_not_replace_last_reply(tmp_path: Path) -> None:
