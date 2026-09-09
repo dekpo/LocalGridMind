@@ -472,7 +472,10 @@ def _render_turn(message: dict) -> None:
         return
     st.markdown('<div class="lgm-turn lgm-assistant">', unsafe_allow_html=True)
     st.markdown(content)
-    elapsed_stamp = format_generated_in(message.get("elapsed_seconds"))
+    elapsed_stamp = format_generated_in(
+        message.get("elapsed_seconds"),
+        model_name=message.get("model_name"),
+    )
     if elapsed_stamp:
         st.markdown(
             f'<div class="lgm-stamp">{html.escape(elapsed_stamp)}</div>',

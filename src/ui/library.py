@@ -41,6 +41,7 @@ class Message:
     content: str
     created_at: str
     elapsed_seconds: float | None = None
+    model_name: str | None = None
 
     def as_thread_item(self) -> dict[str, str | float]:
         item: dict[str, str | float] = {
@@ -50,6 +51,8 @@ class Message:
         }
         if self.elapsed_seconds is not None:
             item["elapsed_seconds"] = self.elapsed_seconds
+        if self.model_name:
+            item["model_name"] = self.model_name
         return item
 
 
@@ -170,7 +173,7 @@ class ConversationLibrary:
             rows = conn.execute(
                 """
                 SELECT id, conversation_id, role, content, created_at,
-                       elapsed_seconds
+                       elapsed_seconds, model_name
                 FROM messages
                 WHERE conversation_id = ?
                 ORDER BY id ASC
@@ -202,21 +205,31 @@ class ConversationLibrary:
         *,
         created_at: str | None = None,
         elapsed_seconds: float | None = None,
+        model_name: str | None = None,
     ) -> Message:
         if role not in ALLOWED_ROLES:
             raise ValueError(f"Unsupported message role: {role}")
         if self.get_conversation(conversation_id) is None:
             raise KeyError(f"Unknown conversation: {conversation_id}")
         when = created_at if created_at else utc_now_iso()
+        stored_model = " ".join(str(model_name or "").split()) or None
         with self._session() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO messages (
-                    conversation_id, role, content, created_at, elapsed_seconds
+                    conversation_id, role, content, created_at,
+                    elapsed_seconds, model_name
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (conversation_id, role, content, when, elapsed_seconds),
+                (
+                    conversation_id,
+                    role,
+                    content,
+                    when,
+                    elapsed_seconds,
+                    stored_model,
+                ),
             )
             conn.execute(
                 "UPDATE conversations SET updated_at = ? WHERE id = ?",
@@ -230,6 +243,7 @@ class ConversationLibrary:
             content=content,
             created_at=when,
             elapsed_seconds=elapsed_seconds,
+            model_name=stored_model,
         )
 
     def delete_conversation(self, conversation_id: int) -> None:
@@ -476,6 +490,7 @@ class ConversationLibrary:
                     content TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     elapsed_seconds REAL,
+                    model_name TEXT,
                     FOREIGN KEY (conversation_id)
                         REFERENCES conversations(id)
                         ON DELETE CASCADE
@@ -527,6 +542,8 @@ class ConversationLibrary:
                 conn.execute(
                     "ALTER TABLE messages ADD COLUMN elapsed_seconds REAL"
                 )
+            if "model_name" not in columns:
+                conn.execute("ALTER TABLE messages ADD COLUMN model_name TEXT")
 
     @contextmanager
     def _session(self) -> Iterator[sqlite3.Connection]:
@@ -578,6 +595,9 @@ def _file_from_row(row: sqlite3.Row) -> WorkbookFile:
 def _message_from_row(row: sqlite3.Row) -> Message:
     raw_elapsed = row["elapsed_seconds"]
     elapsed = float(raw_elapsed) if raw_elapsed is not None else None
+    keys = set(row.keys())
+    raw_model = row["model_name"] if "model_name" in keys else None
+    model_name = str(raw_model).strip() if raw_model else None
     return Message(
         id=int(row["id"]),
         conversation_id=int(row["conversation_id"]),
@@ -585,4 +605,5 @@ def _message_from_row(row: sqlite3.Row) -> Message:
         content=str(row["content"]),
         created_at=str(row["created_at"]),
         elapsed_seconds=elapsed,
+        model_name=model_name or None,
     )

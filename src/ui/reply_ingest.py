@@ -34,8 +34,13 @@ def ingest_finished_reply(
     content = _ground_reply(library, conversation_id, content)
     if _already_has_assistant(thread, content):
         return None
+    model_name = getattr(runtime, "last_generate_model", None)
     stored = add_message(
-        thread, "assistant", content, elapsed_seconds=elapsed
+        thread,
+        "assistant",
+        content,
+        elapsed_seconds=elapsed,
+        model_name=model_name,
     )
     library.append_message(
         conversation_id,
@@ -43,6 +48,7 @@ def ingest_finished_reply(
         stored["content"],
         created_at=stored["created_at"],
         elapsed_seconds=elapsed,
+        model_name=stored.get("model_name"),
     )
     return stored
 
