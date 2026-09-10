@@ -49,6 +49,11 @@ data/chats/*
 *.sqlite-wal
 *.sqlite-shm
 
+# Local GGUF eval transcripts (pasted chats). Keep README + .gitkeep only.
+data/model-evals/*
+!data/model-evals/.gitkeep
+!data/model-evals/README.md
+
 # Packaging and build artifacts
 build/
 dist/
