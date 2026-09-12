@@ -132,6 +132,29 @@ def generating_wait_copy(seconds: float | int | None) -> str:
     return WAIT_COPY_AFTER_300
 
 
+def format_thread_export(thread: list[dict[str, Any]]) -> str:
+    """Plain-text transcript of the Recents thread for download."""
+    parts: list[str] = []
+    for message in thread:
+        role = str(message.get("role") or "message").upper()
+        content = str(message.get("content") or "").strip()
+        stamp = ""
+        if role == "ASSISTANT":
+            stamp = format_generated_in(
+                message.get("elapsed_seconds"),
+                model_name=message.get("model_name"),
+            )
+        elif role == "USER":
+            stamp = format_message_stamp(str(message.get("created_at") or ""))
+        header = f"{role} ({stamp})" if stamp else role
+        body = f"{header}\n{content}".strip()
+        if body:
+            parts.append(body)
+    if not parts:
+        return ""
+    return "\n\n".join(parts) + "\n"
+
+
 def last_user_content(thread: list[dict[str, Any]]) -> str | None:
     """Most recent user turn, or None."""
     for message in reversed(thread):

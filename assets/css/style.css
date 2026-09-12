@@ -108,3 +108,9 @@ div[data-testid="stHorizontalBlock"]:has(.lgm-generating) button {
   padding: 0.45rem 0.65rem;
   margin-bottom: 0.55rem;
 }
+
+/* Compact Save this reply download under assistant turns. */
+[data-testid="stDownloadButton"] button {
+  min-height: 1.85rem;
+  padding: 0.2rem 0.65rem;
+}

@@ -14,7 +14,16 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-ALLOWED_SUFFIXES = {".xlsx", ".xlsm", ".csv"}
+from .legacy_xls import (
+    XLS_FORMULA_NOTICE,
+    cleanup_converted_xlsx,
+    convert_xls_to_temp_xlsx,
+    iter_xls_value_sheets,
+    xls_has_vba,
+)
+
+ALLOWED_SUFFIXES = {".xlsx", ".xlsm", ".xls", ".csv"}
+WORKBOOK_FILE_TYPES = ["xlsx", "xlsm", "xls", "csv"]
 MAX_SAMPLE_VALUES = 3
 MAX_SAMPLE_CHARS = 24
 MAX_FORMULAS_PER_FILE = 40
@@ -368,6 +377,8 @@ def inspect_file(path: Path) -> FileInventory:
     try:
         if suffix == ".csv":
             return _inspect_csv(path)
+        if suffix == ".xls":
+            return _inspect_xls(path)
         if suffix in {".xlsx", ".xlsm"}:
             return _inspect_excel(path)
         return FileInventory(
@@ -408,6 +419,63 @@ def _read_csv(path: Path) -> pd.DataFrame:
     if last_error is not None:
         return pd.read_csv(path, encoding="latin-1", encoding_errors="replace")
     return pd.read_csv(path)
+
+
+def _inspect_xls(path: Path) -> FileInventory:
+    """Prefer Excel→xlsx (formulas). Else values only, with an English notice."""
+    converted = convert_xls_to_temp_xlsx(path)
+    try:
+        if converted is not None:
+            inventory = _inspect_excel(converted)
+            inventory.filename = path.name
+            inventory.kind = "xls"
+            if xls_has_vba(path):
+                inventory.features.vba = True
+            return inventory
+        return _inspect_xls_values(path)
+    finally:
+        cleanup_converted_xlsx(converted)
+
+
+def _inspect_xls_values(path: Path) -> FileInventory:
+    sheets = [
+        _sheet_from_rows(name, rows) for name, rows in iter_xls_value_sheets(path)
+    ]
+    issues = [XLS_FORMULA_NOTICE]
+    for sheet in sheets:
+        issues.extend(sheet.empty_notes)
+    return FileInventory(
+        filename=path.name,
+        kind="xls",
+        sheets=sheets,
+        issues=issues,
+        features=FeatureFlags(vba=xls_has_vba(path)),
+        formula_total=0,
+    )
+
+
+def _sheet_from_rows(name: str, rows: list[list[Any]]) -> SheetInfo:
+    limited: list[list[Any]] = []
+    for row in rows[: MAX_SCAN_ROWS + 1]:
+        limited.append(list(row[:MAX_SCAN_COLS]))
+    return _sheet_from_frame(name, _frame_from_rows(limited))
+
+
+def _frame_from_rows(rows: list[list[Any]]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    headers = [
+        _header_name(value, index + 1) for index, value in enumerate(rows[0])
+    ]
+    body = rows[1:]
+    width = len(headers)
+    padded = []
+    for row in body:
+        cells = list(row[:width])
+        if len(cells) < width:
+            cells.extend([None] * (width - len(cells)))
+        padded.append(cells)
+    return pd.DataFrame(padded, columns=headers)
 
 
 def _inspect_excel(path: Path) -> FileInventory:
@@ -466,7 +534,7 @@ def detect_excel_features(path: Path) -> FeatureFlags:
         with zipfile.ZipFile(path) as archive:
             names = [item.filename.replace("\\", "/") for item in archive.infolist()]
     except zipfile.BadZipFile:
-        return FeatureFlags()
+        return FeatureFlags(vba=xls_has_vba(path))
 
     lowered = [name.lower() for name in names]
     return FeatureFlags(
@@ -986,6 +1054,8 @@ def _english_file(item: FileInventory) -> list[str]:
         lines.append(f"- Stored formulas{extra}:")
         for formula in item.formulas:
             lines.append(f"  - `{formula.cell}`: `{formula.formula}`")
+    elif XLS_FORMULA_NOTICE in item.issues:
+        lines.append(f"- {XLS_FORMULA_NOTICE}")
     else:
         lines.append("- Stored formulas: none found.")
 
@@ -1107,6 +1177,8 @@ def _prompt_body(
         if item.features.any():
             flags = _feature_flag_tokens(item.features)
             features.append(f"  {prefix}FEATURES {','.join(flags)} (detect only)")
+        if XLS_FORMULA_NOTICE in item.issues:
+            features.append(f"  {prefix}NOTE older .xls: stored formulas not readable")
 
     lines = ["PACK " + ", ".join(pack.filenames())]
     if pack.missing_links:

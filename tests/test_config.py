@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from src.config import (
+    ModelInfo,
     get_project_root,
     CHAT_MAX_TOKENS,
     CHATS_DB_PATH,
@@ -15,8 +16,10 @@ from src.config import (
     REASONING_TIME_LABELS,
     REASONING_TIME_TOKENS,
     UPLOADS_DIR,
+    label_for_model_path,
     list_available_models,
     resolve_reasoning_tokens,
+    resolve_selected_model_label,
 )
 
 
@@ -78,3 +81,57 @@ def test_get_project_root_uses_exe_folder_when_frozen(
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(exe))
     assert get_project_root() == tmp_path
+
+
+def _fake_models(tmp_path: Path) -> list[ModelInfo]:
+    alpha = tmp_path / "alpha.gguf"
+    beta = tmp_path / "Gemma-2-9b.gguf"
+    alpha.write_bytes(b"x")
+    beta.write_bytes(b"y")
+    return [
+        ModelInfo(name="alpha", path=alpha.resolve(), size_bytes=1),
+        ModelInfo(name="Gemma-2-9b", path=beta.resolve(), size_bytes=2),
+    ]
+
+
+def test_selectbox_follows_loaded_stem_when_session_is_empty(tmp_path: Path) -> None:
+    models = _fake_models(tmp_path)
+    labels = [item.display_label for item in models]
+    loaded = models[1].path
+    chosen = resolve_selected_model_label(
+        labels,
+        stored=None,
+        loaded_path=loaded,
+        loaded_ready=True,
+        models=models,
+    )
+    assert chosen == models[1].display_label
+    assert label_for_model_path(loaded, models) == models[1].display_label
+
+
+def test_selectbox_keeps_persisted_pick_when_another_model_is_loaded(
+    tmp_path: Path,
+) -> None:
+    models = _fake_models(tmp_path)
+    labels = [item.display_label for item in models]
+    chosen = resolve_selected_model_label(
+        labels,
+        stored=models[0].display_label,
+        loaded_path=models[1].path,
+        loaded_ready=True,
+        models=models,
+    )
+    assert chosen == models[0].display_label
+
+
+def test_selectbox_stale_label_resyncs_to_loaded(tmp_path: Path) -> None:
+    models = _fake_models(tmp_path)
+    labels = [item.display_label for item in models]
+    chosen = resolve_selected_model_label(
+        labels,
+        stored="missing (9.9 GB)",
+        loaded_path=models[1].path,
+        loaded_ready=True,
+        models=models,
+    )
+    assert chosen == models[1].display_label

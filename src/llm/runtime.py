@@ -193,7 +193,9 @@ class ModelRuntime:
             return self._loaded_path
 
     def is_ready(self) -> bool:
-        return self.status is RuntimeStatus.READY
+        """True when a GGUF is in memory. Independent of the sidebar pick."""
+        with self._lock:
+            return self._status is RuntimeStatus.READY and self._loaded_path is not None
 
     @property
     def load_progress(self) -> float | None:

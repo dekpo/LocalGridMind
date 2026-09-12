@@ -8,16 +8,20 @@ from src.core.inventory import (
     MAX_FORMULAS_PER_FILE,
     MAX_PROMPT_CHARS,
     PackInventory,
+    WORKBOOK_FILE_TYPES,
     build_pack_inventory,
     detect_excel_features,
     inspect_file,
+    is_workbook_name,
 )
+from src.core.legacy_xls import XLS_FORMULA_NOTICE, xls_has_vba
 from src.core.prompt import INVENTORY_PREAMBLE, build_chat_prompt
 from tests.workbook_fixtures import (
     add_zip_members,
     write_books_xlsx,
     write_mixed_csv,
     write_rates_xlsx,
+    write_tiny_xls,
     write_wacc_pack_xlsx,
 )
 
@@ -228,6 +232,85 @@ def test_unreadable_file_is_reported_in_english(tmp_path: Path) -> None:
     assert inventory.unreadable is True
     pack = build_pack_inventory([path])
     assert "could not be read" in pack.to_english()
+
+
+def test_workbook_types_include_xls() -> None:
+    assert is_workbook_name("wacccalc.xls")
+    assert is_workbook_name("Rates.xlsx")
+    assert is_workbook_name("macro.xlsm")
+    assert is_workbook_name("ledger.csv")
+    assert not is_workbook_name("notes.txt")
+    assert WORKBOOK_FILE_TYPES == ["xlsx", "xlsm", "xls", "csv"]
+
+
+def test_xls_fallback_lists_values_without_formulas(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = write_tiny_xls(tmp_path / "ledger.xls")
+    monkeypatch.setattr(
+        "src.core.inventory.convert_xls_to_temp_xlsx", lambda src: None
+    )
+    inventory = inspect_file(path)
+    assert inventory.filename == "ledger.xls"
+    assert inventory.kind == "xls"
+    assert inventory.unreadable is False
+    assert inventory.formulas == []
+    assert inventory.formula_total == 0
+    assert XLS_FORMULA_NOTICE in inventory.issues
+    sheet = inventory.sheets[0]
+    names = [column.name for column in sheet.columns]
+    assert names == ["id", "amount", "note"]
+    english = inventory_to_english_snippet(inventory)
+    assert "ledger.xls" in english
+    assert "could not be read from this older Excel format" in english
+    prompt = PackInventory(files=[inventory]).to_prompt()
+    assert "stored formulas not readable" in prompt
+
+
+def test_xls_excel_convert_reuses_openpyxl_inventory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    xls_path = write_tiny_xls(tmp_path / "Rates.xls")
+    source = write_rates_xlsx(tmp_path / "Rates.xlsx")
+
+    def fake_convert(src: Path) -> Path:
+        dest_dir = tmp_path / "lgm-xls-conv"
+        dest_dir.mkdir(exist_ok=True)
+        dest = dest_dir / "Rates.xlsx"
+        dest.write_bytes(source.read_bytes())
+        return dest
+
+    monkeypatch.setattr(
+        "src.core.inventory.convert_xls_to_temp_xlsx", fake_convert
+    )
+    inventory = inspect_file(xls_path)
+    assert inventory.filename == "Rates.xls"
+    assert inventory.kind == "xls"
+    cells = {item.cell: item.formula for item in inventory.formulas}
+    assert "Rates!E2" in cells
+    assert "[Books.xlsx]" in cells["Rates!E2"]
+    assert XLS_FORMULA_NOTICE not in inventory.issues
+    english = inventory_to_english_snippet(inventory)
+    assert "could not be read from this older Excel format" not in english
+
+
+def test_xlsx_inventory_unchanged_with_xls_support(tmp_path: Path) -> None:
+    path = write_rates_xlsx(tmp_path / "Rates.xlsx")
+    inventory = inspect_file(path)
+    assert inventory.kind == "xlsx"
+    assert inventory.filename == "Rates.xlsx"
+    cells = {item.cell: item.formula for item in inventory.formulas}
+    assert "Rates!E2" in cells
+    assert XLS_FORMULA_NOTICE not in inventory.issues
+
+
+def test_xls_vba_detect_only_does_not_need_excel(tmp_path: Path) -> None:
+    path = tmp_path / "macro.xls"
+    path.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"_VBA_PROJECT" + b"\x00")
+    assert xls_has_vba(path) is True
+    flags = detect_excel_features(path)
+    assert flags.vba is True
+    assert flags.power_query is False
 
 
 def inventory_to_english_snippet(inventory) -> str:

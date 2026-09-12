@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 from config import UPLOADS_DIR
+from core.inventory import WORKBOOK_FILE_TYPES
 from core.lookup import answer_from_json, answer_inventory_question
 from core.packs import (
     NoWorkbookFilesError,
@@ -35,6 +36,7 @@ from ui.chat_store import (
     format_elapsed_label,
     format_generated_in,
     format_message_stamp,
+    format_thread_export,
     generating_wait_copy,
     last_user_content,
 )
@@ -46,7 +48,7 @@ from ui.library import (
 )
 from ui.reply_ingest import ingest_finished_reply
 
-WORKBOOK_TYPES = ["xlsx", "xlsm", "csv"]
+WORKBOOK_TYPES = WORKBOOK_FILE_TYPES
 NEED_MODEL_NOTICE = (
     "The workbook inventory is ready in this chat. "
     "Load a local model to ask a question."
@@ -90,7 +92,10 @@ def ensure_active_conversation(library: ConversationLibrary) -> int:
 
 
 def start_new_chat(library: ConversationLibrary) -> int:
-    """Create an empty conversation and show a blank thread."""
+    """Create an empty conversation and show a blank thread.
+
+    Do not reset Selected model: the GGUF stays in RAM across Recents chats.
+    """
     created = library.create_conversation()
     activate_conversation(library, created.id)
     return created.id
@@ -137,8 +142,9 @@ def render_chat_shell(
         )
         st.rerun()
 
-    for message in thread:
-        _render_turn(message)
+    for index, message in enumerate(thread):
+        _render_turn(message, conversation_id=conversation_id, index=index)
+    _render_thread_export(thread, conversation_id=conversation_id)
 
     _offer_generate_again(
         thread,
@@ -456,7 +462,9 @@ def _ingest_finished_title(library: ConversationLibrary) -> None:
     st.rerun()
 
 
-def _render_turn(message: dict) -> None:
+def _render_turn(
+    message: dict, *, conversation_id: int, index: int
+) -> None:
     role = message.get("role")
     content = str(message.get("content") or "")
     if role == "user":
@@ -481,4 +489,46 @@ def _render_turn(message: dict) -> None:
             f'<div class="lgm-stamp">{html.escape(elapsed_stamp)}</div>',
             unsafe_allow_html=True,
         )
+    _render_reply_export(
+        content, conversation_id=conversation_id, index=index
+    )
     st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_reply_export(
+    content: str, *, conversation_id: int, index: int
+) -> None:
+    st.download_button(
+        "Save this reply",
+        data=content.encode("utf-8"),
+        file_name=f"reply-{index + 1}.txt",
+        mime="text/plain",
+        key=f"lgm-reply-dl-{conversation_id}-{index}",
+    )
+
+
+def _render_thread_export(thread: list[dict], *, conversation_id: int) -> None:
+    if not thread:
+        return
+    transcript = format_thread_export(thread)
+    if not transcript:
+        return
+    with st.expander(
+        "Download this chat",
+        expanded=False,
+        key=f"lgm-save-chat-{conversation_id}",
+    ):
+        st.download_button(
+            "Download thread as .txt",
+            data=transcript.encode("utf-8"),
+            file_name=f"chat-{conversation_id}.txt",
+            mime="text/plain",
+            key=f"lgm-thread-dl-{conversation_id}",
+        )
+        copy_key = f"lgm-thread-copy-{conversation_id}"
+        st.session_state[copy_key] = transcript
+        st.text_area(
+            "Chat text",
+            key=copy_key,
+            height=180,
+        )

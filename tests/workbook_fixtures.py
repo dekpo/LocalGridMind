@@ -96,6 +96,39 @@ def write_mixed_csv(path: Path) -> Path:
     return path
 
 
+def write_tiny_xls(path: Path) -> Path:
+    """Synthetic BIFF2 workbook. No client files; no xlwt binary."""
+    import struct
+
+    chunks: list[bytes] = []
+
+    def record(code: int, payload: bytes) -> None:
+        chunks.append(struct.pack("<HH", code, len(payload)))
+        chunks.append(payload)
+
+    def label(row: int, col: int, text: str) -> None:
+        raw = text.encode("latin-1")
+        record(0x0004, struct.pack("<HHB", row, col, 0) + bytes([len(raw)]) + raw)
+
+    def number(row: int, col: int, value: float) -> None:
+        record(0x0003, struct.pack("<HHB", row, col, 0) + struct.pack("<d", float(value)))
+
+    record(0x0009, struct.pack("<HH", 0x0002, 0x0010))
+    record(0x0000, struct.pack("<HHBB", 0, 3, 0, 3) + b"\x00")
+    label(0, 0, "id")
+    label(0, 1, "amount")
+    label(0, 2, "note")
+    number(1, 0, 1)
+    number(1, 1, 10)
+    label(1, 2, "hello")
+    number(2, 0, 2)
+    number(2, 1, 20)
+    label(2, 2, "world")
+    record(0x000A, b"")
+    path.write_bytes(b"".join(chunks))
+    return path
+
+
 def add_zip_members(path: Path, members: dict[str, bytes]) -> Path:
     tmp = path.with_name(path.name + ".tmp")
     with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(tmp, "w") as dest:

@@ -25,7 +25,7 @@ SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 class NoWorkbookFilesError(ValueError):
-    """The upload contained no .xlsx / .xlsm / .csv files."""
+    """The upload contained no .xlsx / .xlsm / .xls / .csv files."""
 
 
 @dataclass(frozen=True)

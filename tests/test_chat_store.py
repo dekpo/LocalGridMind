@@ -18,6 +18,7 @@ from src.ui.chat_store import (
     format_recent_button_label,
     format_recent_stamp,
     format_recent_title,
+    format_thread_export,
     generating_wait_copy,
     last_user_content,
 )
@@ -137,3 +138,22 @@ def test_last_user_content_returns_latest_user_turn() -> None:
     add_message(thread, "assistant", "ok")
     add_message(thread, "user", "second")
     assert last_user_content(thread) == "second"
+
+
+def test_format_thread_export_includes_user_and_assistant() -> None:
+    thread = empty_thread()
+    assert format_thread_export(thread) == ""
+    add_message(thread, "user", "Where is WACC?", created_at=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc))
+    add_message(
+        thread,
+        "assistant",
+        "Input sheet!B35.",
+        elapsed_seconds=12,
+        model_name="Gemma-2-9b",
+    )
+    text = format_thread_export(thread)
+    assert "USER" in text
+    assert "Where is WACC?" in text
+    assert "ASSISTANT" in text
+    assert "Input sheet!B35." in text
+    assert "Gemma-2-9b" in text
