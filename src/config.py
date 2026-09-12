@@ -119,6 +119,45 @@ def resolve_model_by_label(label: str) -> ModelInfo | None:
     return None
 
 
+def label_for_model_path(
+    path: Path | None,
+    models: list[ModelInfo] | None = None,
+) -> str | None:
+    """Dropdown label for a loaded GGUF path, or None if it is not in models/."""
+    if path is None:
+        return None
+    discovered = models if models is not None else list_available_models()
+    target = Path(path)
+    try:
+        resolved = target.resolve()
+    except OSError:
+        resolved = target
+    for model in discovered:
+        if model.path == target or model.path == resolved:
+            return model.display_label
+        if model.path.name == target.name or model.name == target.stem:
+            return model.display_label
+    return None
+
+
+def resolve_selected_model_label(
+    labels: list[str],
+    *,
+    stored: str | None,
+    loaded_path: Path | None = None,
+    loaded_ready: bool = False,
+    models: list[ModelInfo] | None = None,
+) -> str | None:
+    """Keep a persisted pick. After refresh, follow the loaded stem when Ready."""
+    if stored in labels:
+        return stored
+    if loaded_ready:
+        matched = label_for_model_path(loaded_path, models)
+        if matched in labels:
+            return matched
+    return labels[0] if labels else None
+
+
 def resolve_reasoning_tokens(label: str) -> int:
     """Map a Reasoning time label to the hidden chat completion budget."""
     return REASONING_TIME_TOKENS.get(label, CHAT_MAX_TOKENS)

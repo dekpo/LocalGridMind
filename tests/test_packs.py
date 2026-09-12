@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from src.core.inventory import XLS_FORMULA_NOTICE
 from src.core.packs import (
     NoWorkbookFilesError,
     attach_uploads_to_conversation,
@@ -16,7 +17,12 @@ from src.core.packs import (
 from src.core.prompt import INVENTORY_PREAMBLE, NO_PACK_PREAMBLE, build_chat_prompt
 from src.llm.runtime import RETRY_STEER_PREFIX
 from src.ui.library import ConversationLibrary
-from tests.workbook_fixtures import write_books_xlsx, write_mixed_csv, write_rates_xlsx
+from tests.workbook_fixtures import (
+    write_books_xlsx,
+    write_mixed_csv,
+    write_rates_xlsx,
+    write_tiny_xls,
+)
 
 
 def _library(tmp_path: Path) -> ConversationLibrary:
@@ -139,6 +145,31 @@ def test_reject_upload_without_workbooks(tmp_path: Path) -> None:
 def test_safe_filename_strips_paths() -> None:
     assert safe_filename(r"folder\Rates.xlsx") == "Rates.xlsx"
     assert safe_filename("../Books.csv") == "Books.csv"
+    assert safe_filename(r"folder\wacccalc.xls") == "wacccalc.xls"
+
+
+def test_attach_accepts_xls_and_keeps_xlsx_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    library = _library(tmp_path)
+    conversation = library.create_conversation()
+    uploads_root = tmp_path / "uploads"
+    xls = write_tiny_xls(tmp_path / "ledger.xls")
+    monkeypatch.setattr(
+        "src.core.inventory.convert_xls_to_temp_xlsx", lambda src: None
+    )
+    result = attach_uploads_to_conversation(
+        library,
+        conversation.id,
+        [("ledger.xls", xls.read_bytes())],
+        uploads_root,
+    )
+    assert result.filenames == ["ledger.xls"]
+    assert "ledger.xls" in result.english_text
+    assert XLS_FORMULA_NOTICE in result.english_text
+    stored = library.list_pack_files(result.pack.id)
+    assert stored[0].original_name == "ledger.xls"
+    assert (uploads_root / stored[0].stored_relpath).is_file()
 
 
 def test_build_chat_prompt_injects_inventory_or_warns() -> None:

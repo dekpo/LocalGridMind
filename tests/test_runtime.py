@@ -108,12 +108,14 @@ def test_unload_releases_model(tmp_path: Path) -> None:
     runtime = ModelRuntime(llama_factory=FakeLlama)
     runtime.load(model)
     llama = FakeLlama.instances[0]
+    assert runtime.is_ready() is True
 
     runtime.unload()
 
     assert runtime.status is RuntimeStatus.UNLOADED
     assert runtime.loaded_path is None
     assert llama.closed is True
+    assert runtime.is_ready() is False
 
 
 def test_switching_models_unloads_the_previous_one(tmp_path: Path) -> None:

@@ -16,6 +16,7 @@ from config import (
     get_model_labels,
     resolve_model_by_label,
     resolve_reasoning_tokens,
+    resolve_selected_model_label,
 )
 from core.packs import purge_orphan_pack_files
 from llm.runtime import RuntimeStatus, get_runtime
@@ -31,6 +32,7 @@ from ui.runtime_panel import render_model_sidebar
 from ui.theme import apply_theme
 
 REASONING_TIME_KEY = "reasoning_time_label"
+SELECTED_MODEL_KEY = "selected_model_label"
 
 st.set_page_config(page_title="LocalGridMind", layout="wide")
 ensure_runtime_directories()
@@ -81,9 +83,19 @@ with st.sidebar:
     with st.expander("Local model", expanded=True):
         st.caption(f"CPU threads locked to {N_THREADS}.")
         if model_labels:
+            stored_label = st.session_state.get(SELECTED_MODEL_KEY)
+            seeded = resolve_selected_model_label(
+                model_labels,
+                stored=stored_label if isinstance(stored_label, str) else None,
+                loaded_path=runtime.loaded_path,
+                loaded_ready=runtime.is_ready(),
+            )
+            if seeded is not None:
+                st.session_state[SELECTED_MODEL_KEY] = seeded
             selected_label = st.selectbox(
                 "Selected model",
                 options=model_labels,
+                key=SELECTED_MODEL_KEY,
                 disabled=model_selects_busy,
             )
             selected_model = resolve_model_by_label(selected_label)
@@ -103,7 +115,7 @@ with st.sidebar:
 chat_max_tokens = resolve_reasoning_tokens(
     str(st.session_state.get(REASONING_TIME_KEY, DEFAULT_REASONING_TIME_LABEL))
 )
-model_ready = selected_model is not None and runtime.status is RuntimeStatus.READY
+model_ready = runtime.is_ready()
 render_chat_shell(
     model_ready=model_ready,
     library=library,
