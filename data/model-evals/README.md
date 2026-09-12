@@ -22,10 +22,13 @@ Example: `Gemma-2-9b-it-Q4_K_M-fp16__C1_S1-ginzu.md`
 
 ## Downloads
 
-NYU copies (exinfm links are often dead). Do not use exinfm items 6,
-30, or 41 (macros / exe).
+Do **not** open https://pages.stern.nyu.edu/~adamodar/pc/ (directory
+listing is 403 Forbidden). Use the catalog page or a **file** URL.
+Catalog: https://pages.stern.nyu.edu/~adamodar/New_Home_Page/spreadsh.htm
+Damodaran notes Chrome often fails these downloads; use Edge if needed.
+Do not use exinfm items 6, 30, or 41 (macros / exe).
 
-| Id | How to attach | Files |
+| Id | How to attach | Direct file URL |
 | --- | --- | --- |
 | S1 | Paperclip, one file | https://pages.stern.nyu.edu/~adamodar/pc/fcffsimpleginzu.xlsx |
 | S2 | Paperclip, one file | https://pages.stern.nyu.edu/~adamodar/pc/wacccalc.xls |
