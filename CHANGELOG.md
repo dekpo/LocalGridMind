@@ -5,6 +5,13 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Hide Streamlit Deploy and the app menu (2026-09-12)
+
+`.streamlit/config.toml` sets `client.toolbarMode = "minimal"` so the
+Deploy button and the top-right developer menu do not appear on
+localhost. Theme / print stay available only if that setting is later
+changed to `"viewer"`.
+
 ### Ignore local model downloads (2026-09-09)
 
 Git tracks only `models/README.md` (and `.gitkeep`). GGUF files,

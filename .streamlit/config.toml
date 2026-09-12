@@ -3,6 +3,11 @@
 [browser]
 gatherUsageStats = false
 
+[client]
+# Hide Deploy, Rerun, Clear cache, and the top-right menu on localhost.
+# "viewer" would keep the theme / print menu. Analysts do not need either.
+toolbarMode = "minimal"
+
 [server]
 # Avoid the file watcher touching llama.dll / GGUF files during a long CPU load.
 fileWatcherType = "poll"
