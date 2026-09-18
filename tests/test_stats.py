@@ -23,6 +23,7 @@ from src.core.stats import build_sheet_stats, format_stat_number
 from tests.workbook_fixtures import (
     write_agency_and_subagency_csv,
     write_agency_costs_csv,
+    write_agency_costs_xlsx,
     write_many_agencies_csv,
     write_wacc_pack_xlsx,
 )
@@ -194,11 +195,37 @@ def test_unknown_column_fails_closed(tmp_path: Path) -> None:
 def test_excel_without_stats_card_asks_for_csv(tmp_path: Path) -> None:
     path = write_wacc_pack_xlsx(tmp_path / "wacc_pack.xlsx")
     pack = build_pack_inventory([path])
+    assert all(sheet.stats is None for sheet in pack.files[0].sheets)
     answer = answer_inventory_question("Which agency costs the most?", pack)
     assert answer is not None
     assert answer.startswith("That table fact is not on the inventory stats card.")
     assert "please attach the table as a CSV." in answer
     assert "which group is largest" in answer
+
+
+def test_xlsx_data_table_gets_full_card_not_formula_scan(
+    tmp_path: Path,
+) -> None:
+    path = write_agency_costs_xlsx(
+        tmp_path / "agency_costs.xlsx",
+        early_count=_LARGE_EARLY,
+        late_count=40,
+        late_amount=1000,
+        max_row_amount=9000,
+    )
+    pack = build_pack_inventory([path])
+    sheet = pack.files[0].sheets[0]
+    assert sheet.stats is not None
+    assert sheet.row_count == _LARGE_EARLY + 41
+    agency = next(item for item in sheet.stats.distincts if item.column == "agency")
+    assert "Zulu" in agency.values
+    assert "Omega" in agency.values
+    answer = answer_inventory_question("Which agency costs the most?", pack)
+    assert answer is not None
+    assert "**Zulu**" in answer
+    assert "sum of all rows" in answer
+    assert "Omega" in answer
+    assert "please attach the table as a CSV." not in answer
 
 
 def test_forty_eight_agencies_all_listed(tmp_path: Path) -> None:

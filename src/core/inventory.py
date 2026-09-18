@@ -25,7 +25,9 @@ from .stats import (
     SheetStats,
     build_sheet_stats,
     english_stat_lines,
+    file_allows_tabular_stats,
     prompt_stat_lines,
+    sheet_looks_tabular,
     stats_from_dict,
 )
 
@@ -114,7 +116,9 @@ class SheetInfo:
     empty_notes: list[str] = field(default_factory=list)
     hidden: bool = False
     truncated: bool = False
-    # Full-table aggregates. None when the scan was truncated (Excel).
+    # 1-based Excel header row used when reading a full table for stats.
+    header_row: int = 1
+    # Full-table aggregates. None when the sheet is not a complete data table.
     stats: SheetStats | None = None
 
 
@@ -281,6 +285,7 @@ def _sheet_from_dict(data: dict[str, Any]) -> SheetInfo:
         empty_notes=[str(item) for item in data.get("empty_notes") or []],
         hidden=bool(data.get("hidden")),
         truncated=bool(data.get("truncated")),
+        header_row=int(data.get("header_row") or 1),
         stats=stats_from_dict(data.get("stats")),
     )
 
@@ -494,6 +499,7 @@ def _frame_from_rows(rows: list[list[Any]]) -> pd.DataFrame:
 def _inspect_excel(path: Path) -> FileInventory:
     features = detect_excel_features(path)
     workbook = load_workbook(path, data_only=False, read_only=False)
+    inventory: FileInventory | None = None
     try:
         index_map = _external_index_map(workbook)
         sheets: list[SheetInfo] = []
@@ -525,7 +531,7 @@ def _inspect_excel(path: Path) -> FileInventory:
                     ExternalLinkInfo(workbook=book, used_in=item.name)
                 )
         links = _dedupe_links(links)
-        return FileInventory(
+        inventory = FileInventory(
             filename=path.name,
             kind=path.suffix.lower().lstrip("."),
             sheets=sheets,
@@ -539,6 +545,10 @@ def _inspect_excel(path: Path) -> FileInventory:
         )
     finally:
         workbook.close()
+    if inventory is None:
+        raise RuntimeError(f"Excel inventory failed for {path.name}")
+    _attach_tabular_excel_stats(path, inventory)
+    return inventory
 
 
 def detect_excel_features(path: Path) -> FeatureFlags:
@@ -657,8 +667,72 @@ def _inspect_worksheet(
         empty_notes=empty_notes,
         hidden=hidden,
         truncated=truncated,
+        header_row=header_row,
     )
     return sheet, formulas, issues
+
+
+def _attach_tabular_excel_stats(path: Path, inventory: FileInventory) -> None:
+    """Full-table card on data grids only. Never on formula-heavy workbooks."""
+    if not file_allows_tabular_stats(inventory.formula_total):
+        return
+    indexed = indexed_formulas(inventory)
+    for sheet in inventory.sheets:
+        formula_count = _sheet_formula_count(sheet.name, indexed)
+        if not sheet_looks_tabular(
+            row_count=sheet.row_count,
+            column_count=sheet.column_count,
+            formula_count=formula_count,
+            hidden=sheet.hidden,
+        ):
+            continue
+        frame = _read_excel_table(path, sheet.name, sheet.header_row)
+        if frame is None or frame.empty:
+            continue
+        stats_frame = frame.iloc[:, :MAX_SCAN_COLS] if len(frame.columns) else frame
+        stats = build_sheet_stats(stats_frame)
+        if stats is None:
+            continue
+        sheet.stats = stats
+        sheet.row_count = stats.row_count
+        sheet.empty_notes = [
+            note
+            for note in sheet.empty_notes
+            if "only the first" not in note
+        ]
+        if len(frame) > MAX_SCAN_ROWS:
+            sheet.truncated = True
+            sheet.empty_notes.append(
+                f"{sheet.name} is large; column samples use the first "
+                f"{MAX_SCAN_ROWS} rows. Table facts use every row."
+            )
+
+
+def _read_excel_table(
+    path: Path, sheet_name: str, header_row: int
+) -> pd.DataFrame | None:
+    header = max(int(header_row or 1) - 1, 0)
+    try:
+        return pd.read_excel(
+            path,
+            sheet_name=sheet_name,
+            header=header,
+            engine="openpyxl",
+        )
+    except Exception:
+        return None
+
+
+def _sheet_formula_count(sheet_name: str, formulas: list[FormulaInfo]) -> int:
+    key = sheet_name.casefold()
+    count = 0
+    for item in formulas:
+        cell = str(item.cell).replace("'", "")
+        if "!" not in cell:
+            continue
+        if cell.rsplit("!", 1)[0].strip().casefold() == key:
+            count += 1
+    return count
 
 
 def _sheet_from_frame(

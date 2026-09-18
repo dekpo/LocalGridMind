@@ -96,6 +96,30 @@ def write_mixed_csv(path: Path) -> Path:
     return path
 
 
+def write_agency_costs_xlsx(
+    path: Path,
+    *,
+    early_count: int = 8,
+    late_count: int = 6,
+    early_amount: float = 1,
+    late_amount: float = 1000,
+    max_row_amount: float = 4000,
+) -> Path:
+    """Same layout as `write_agency_costs_csv`, native xlsx, no formulas."""
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "agency_costs"
+    sheet.append(["agency", "amount", "year"])
+    for _ in range(early_count):
+        sheet.append(["Alpha", early_amount, 2010])
+    for _ in range(late_count):
+        sheet.append(["Zulu", late_amount, 2020])
+    sheet.append(["Omega", max_row_amount, 2021])
+    workbook.save(path)
+    workbook.close()
+    return path
+
+
 def write_agency_costs_csv(
     path: Path,
     *,
