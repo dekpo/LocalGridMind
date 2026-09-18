@@ -108,6 +108,35 @@ For each question: path (instant vs spinner), elapsed time if spinner,
 pass / fail / mixed, and one sentence. Attach a screenshot of the
 inventory turn if lookup invented a cell.
 
+---
+
+## File C — large CSV table facts (optional)
+
+Use your own wide CSV (for example a revenue-by-agency file). **New
+chat.** Attach that file only. Model may stay unloaded.
+
+### Inventory lookup (must be instant)
+
+1. Open the inventory turn. Row count must be the **full** file, not
+   2,000. Table facts must list late names that do not appear in the
+   first-column samples.
+2. `How many rows are in the file?`
+3. `List the agencies` (or the real group column name)
+4. `What is the sum of amount?` (or the real numeric column)
+5. `Which agency costs the most?`
+6. `What is the largest single row?`
+
+**Pass:** no spinner. Q5 is a **sum of all rows** for that group, and
+is labelled as a total. Q6 is the max **row**, labelled as not a
+total. Those two answers may name different groups. Fail if the app
+starts a generate, invents a number, or treats the max row as the
+group total.
+
+Formula files (A / B) must still answer named ranges, links, where-is,
+and `Sheet!A1` instantly.
+
+---
+
 We will use this to decide the next product step (tighter lookup,
 stronger grounding, or a later interpreter). Do not ask the prototype
 to recalculate Excel, run macros, or build charts.

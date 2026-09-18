@@ -18,6 +18,7 @@ from src.core.legacy_xls import XLS_FORMULA_NOTICE, xls_has_vba
 from src.core.prompt import INVENTORY_PREAMBLE, build_chat_prompt
 from tests.workbook_fixtures import (
     add_zip_members,
+    write_agency_costs_csv,
     write_books_xlsx,
     write_mixed_csv,
     write_rates_xlsx,
@@ -46,6 +47,7 @@ def test_csv_schema_types_samples_and_empty_column(tmp_path: Path) -> None:
     spare = next(column for column in sheet.columns if column.name == "spare")
     assert spare.samples == []
     assert any("empty column" in note.lower() for note in sheet.empty_notes)
+    assert sheet.row_count == 2
 
 
 def test_excel_formulas_named_range_and_external_link(tmp_path: Path) -> None:
@@ -211,6 +213,37 @@ def test_all_formulas_kept_when_prompt_list_is_capped(tmp_path: Path) -> None:
     prompt = PackInventory(files=[inventory]).to_prompt()
     assert "FORMULAS" in prompt
     assert "50" in prompt
+
+
+def test_csv_english_and_prompt_show_table_facts_not_rows(
+    tmp_path: Path,
+) -> None:
+    from src.core.inventory import MAX_SCAN_ROWS
+
+    path = write_agency_costs_csv(
+        tmp_path / "agency_costs.csv",
+        early_count=MAX_SCAN_ROWS,
+        late_count=40,
+        late_amount=1000,
+        max_row_amount=9000,
+    )
+    pack = build_pack_inventory([path])
+    english = pack.to_english()
+    assert "2,041 data rows" in english
+    assert "Table facts (all 2,041 rows)" in english
+    assert "Zulu" in english
+    assert "Omega" in english
+    assert "sum of all rows" in english
+    assert "Largest single row (not a total)" in english
+    assert "Table facts use every row" in english
+    prompt = pack.to_prompt()
+    assert "STATS" in prompt
+    assert "rows=2041" in prompt
+    assert "TOP_SUM" in prompt
+    assert "MAX_ROW" in prompt
+    assert "Zulu" in prompt
+    assert prompt.count("Alpha,1,2010") == 0
+    assert "9000" in prompt or "9,000" in prompt
 
 
 def test_build_chat_prompt_forbids_invented_cells() -> None:

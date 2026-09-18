@@ -17,6 +17,7 @@ from src.core.lookup import (
     FILE_READS,
     MAX_WHERE_HITS,
     NAMED_RANGES,
+    TABULAR_LARGEST,
     WHERE_COMPUTED,
     answer_from_json,
     answer_inventory_question,
@@ -173,6 +174,14 @@ def test_classify_minimum_intents() -> None:
     assert (
         classify_inventory_intent("What does `Valuation output!C9` do?")
         == CELL_QUOTE
+    )
+    assert (
+        classify_inventory_intent("Which agency costs the most?")
+        == TABULAR_LARGEST
+    )
+    assert (
+        classify_inventory_intent("Which file does Rates read, and is it in this pack?")
+        == FILE_READS
     )
 
 

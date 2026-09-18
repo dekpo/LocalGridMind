@@ -21,6 +21,13 @@ from .legacy_xls import (
     iter_xls_value_sheets,
     xls_has_vba,
 )
+from .stats import (
+    SheetStats,
+    build_sheet_stats,
+    english_stat_lines,
+    prompt_stat_lines,
+    stats_from_dict,
+)
 
 ALLOWED_SUFFIXES = {".xlsx", ".xlsm", ".xls", ".csv"}
 WORKBOOK_FILE_TYPES = ["xlsx", "xlsm", "xls", "csv"]
@@ -107,6 +114,8 @@ class SheetInfo:
     empty_notes: list[str] = field(default_factory=list)
     hidden: bool = False
     truncated: bool = False
+    # Full-table aggregates. None when the scan was truncated (Excel).
+    stats: SheetStats | None = None
 
 
 @dataclass
@@ -272,6 +281,7 @@ def _sheet_from_dict(data: dict[str, Any]) -> SheetInfo:
         empty_notes=[str(item) for item in data.get("empty_notes") or []],
         hidden=bool(data.get("hidden")),
         truncated=bool(data.get("truncated")),
+        stats=stats_from_dict(data.get("stats")),
     )
 
 
@@ -458,7 +468,10 @@ def _sheet_from_rows(name: str, rows: list[list[Any]]) -> SheetInfo:
     limited: list[list[Any]] = []
     for row in rows[: MAX_SCAN_ROWS + 1]:
         limited.append(list(row[:MAX_SCAN_COLS]))
-    return _sheet_from_frame(name, _frame_from_rows(limited))
+    complete = len(rows) <= MAX_SCAN_ROWS + 1
+    return _sheet_from_frame(
+        name, _frame_from_rows(limited), complete=complete
+    )
 
 
 def _frame_from_rows(rows: list[list[Any]]) -> pd.DataFrame:
@@ -648,9 +661,11 @@ def _inspect_worksheet(
     return sheet, formulas, issues
 
 
-def _sheet_from_frame(name: str, frame: pd.DataFrame) -> SheetInfo:
+def _sheet_from_frame(
+    name: str, frame: pd.DataFrame, *, complete: bool = True
+) -> SheetInfo:
     scan = frame.head(MAX_SCAN_ROWS)
-    truncated = len(frame) > MAX_SCAN_ROWS or len(frame.columns) > MAX_SCAN_COLS
+    sample_truncated = len(frame) > MAX_SCAN_ROWS or len(frame.columns) > MAX_SCAN_COLS
     if len(scan.columns) > MAX_SCAN_COLS:
         scan = scan.iloc[:, :MAX_SCAN_COLS]
     headers = [_header_name(column, idx + 1) for idx, column in enumerate(scan.columns)]
@@ -668,10 +683,19 @@ def _sheet_from_frame(name: str, frame: pd.DataFrame) -> SheetInfo:
         columns.append(column)
         if "empty column" in " ".join(column.issues).lower():
             empty_notes.append(f"{name} / {display} is an empty column.")
-    used_rows = int((~scan.isna().all(axis=1)).sum()) if len(scan) else 0
+    used_rows = int((~frame.isna().all(axis=1)).sum()) if len(frame) else 0
     if used_rows == 0 and not len(scan.columns):
         empty_notes.append(f"{name} looks empty.")
-    if truncated:
+    stats = None
+    if complete:
+        stats_frame = frame.iloc[:, :MAX_SCAN_COLS] if len(frame.columns) else frame
+        stats = build_sheet_stats(stats_frame)
+        if sample_truncated:
+            empty_notes.append(
+                f"{name} is large; column samples use the first "
+                f"{min(len(frame), MAX_SCAN_ROWS)} rows. Table facts use every row."
+            )
+    elif sample_truncated:
         empty_notes.append(
             f"{name} is large; only the first {min(len(frame), MAX_SCAN_ROWS)} "
             f"rows were read."
@@ -682,7 +706,8 @@ def _sheet_from_frame(name: str, frame: pd.DataFrame) -> SheetInfo:
         column_count=len(columns),
         columns=columns,
         empty_notes=empty_notes,
-        truncated=truncated,
+        truncated=sample_truncated,
+        stats=stats,
     )
 
 
@@ -1041,8 +1066,10 @@ def _english_file(item: FileInventory) -> list[str]:
         ]
         columns = ", ".join(col_bits) if col_bits else "no columns"
         lines.append(
-            f"- **{sheet.name}**{hidden} — {sheet.row_count} data rows, columns {columns}."
+            f"- **{sheet.name}**{hidden} — {sheet.row_count:,} data rows, columns {columns}."
         )
+        if sheet.stats is not None:
+            lines.extend(english_stat_lines(sheet.stats))
         if sheet.empty_notes:
             for note in sheet.empty_notes:
                 lines.append(f"  - {note}")
@@ -1133,6 +1160,7 @@ def _prompt_body(
     links: list[str] = []
     formulas: list[str] = []
     formula_total = 0
+    stats_lines: list[str] = []
     sheets: list[str] = []
     features: list[str] = []
     unreadable: list[str] = []
@@ -1158,6 +1186,10 @@ def _prompt_body(
             formulas.append(
                 f"  FORMULA {prefix}{formula.cell} {formula.formula}{label}"
             )
+        for sheet in item.sheets:
+            if sheet.stats is None:
+                continue
+            stats_lines.extend(prompt_stat_lines(sheet.stats, prefix=prefix))
         if include_sheets:
             for sheet in item.sheets:
                 col_bits: list[str] = []
@@ -1197,6 +1229,9 @@ def _prompt_body(
     listed = len(formulas)
     lines.append(f"FORMULAS {listed} of {formula_total}")
     lines.extend(formulas)
+    if stats_lines:
+        lines.append("STATS")
+        lines.extend(stats_lines)
     if include_sheets and sheets:
         lines.append("SHEETS")
         lines.extend(sheets)
