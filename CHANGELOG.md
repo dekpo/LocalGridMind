@@ -5,6 +5,17 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 6.5+ — Tabular Excel sheets (2026-09-18)
+
+A `.xlsx` / `.xlsm` that is a **data grid** (about 20 stored formulas
+or fewer in the whole file, header row, many data rows, few formulas
+on the sheet) now gets the same table-facts card as a CSV. Pandas
+reads **every** row of that sheet. Saving a CSV as `.xlsx` from Excel
+or LibreOffice is enough. Formula-heavy workbooks (Ginzu, WACC
+calculators) are unchanged: no card, CSV attach hint, formula lookup
+intact. Human check: revenue table as LibreOffice `.xlsx` (same
+UN-DPO sum as the CSV); Ginzu still returns the CSV hint.
+
 ### Phase 6.5 — Tabular facts (2026-09-12, human-checked 2026-09-18)
 
 A **CSV** is inventoried once from every row. Column samples may still
@@ -16,15 +27,15 @@ largest **single row** (labelled as a row, not a total).
 Questions such as “list the agencies”, “how many rows”, “sum of
 amount”, and “which agency costs the most” are answered from that
 card with no model generate. If the column is not on the card, the
-app lists **Available columns**. `.xlsx` / `.xls` packs do **not**
-get a table-facts card (the formula scan is capped). The same total
-question then says to attach the table as a CSV. Instant; no spinner.
+app lists **Available columns**. Formula-heavy `.xlsx` / `.xls`
+(Ginzu, WACC) still get **no** card; the same total question says to
+attach the table as a CSV. Instant; no spinner.
 
 Formula lookup (named ranges, links, where-is, `Sheet!A1`) is
 unchanged. No RAG, no extra context window, no rows sent to the
-model. Tests use synthetic CSV only. Human check: 35,854-row revenue
-CSV (UN-DPO sum vs 8.5e9 max row) plus Ginzu / `wacccalc.xls` CSV
-hint.
+model. Tests use synthetic CSV / xlsx only. Human check: 35,854-row
+revenue CSV (UN-DPO sum vs 8.5e9 max row) plus Ginzu / `wacccalc.xls`
+CSV hint.
 
 ### Hide Streamlit Deploy and the app menu (2026-09-12)
 

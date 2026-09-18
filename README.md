@@ -10,9 +10,10 @@ answered from that cache **with no AI generate**. The model is used
 only when the question is not a stored fact (plain-English explain, or
 a suggested formula). The model must not invent numbers.
 
-This repository has completed **phase 6.5 (tabular facts)**. Read
-`PRODUCT.md` for intent, feasibility, and limits. See `CHANGELOG.md`
-for what landed and `ROADMAP.md` for the phase plan.
+This repository has completed **phase 6.5+ (tabular facts on CSV and
+data-grid Excel)**. Read `PRODUCT.md` for intent, feasibility, and
+limits. See `CHANGELOG.md` for what landed and `ROADMAP.md` for the
+phase plan.
 
 Attach a file or a folder of linked workbooks to the current chat.
 The app keeps a local copy and a compact inventory. Later questions
@@ -29,8 +30,8 @@ workbook changes.
 | File | What the app extracts | Instant answers without the model |
 | --- | --- | --- |
 | **`.csv`** | Pandas loads **every row**. Column *samples* may still use the first 2,000 rows. | Schema, plus a **table-facts card**: full row count, low-cardinality values, numeric min/max/sum, year range, top-5 group **sums**, and the largest **single row** (labelled separately). |
-| **`.xlsx` / `.xlsm`** | openpyxl: stored formulas, named ranges, external links. Schema scan is capped (first 2,000 rows / 50 columns on large sheets). VBA / Power Query / Pivot / DAX: detect only. | Named ranges, links, “where is X”, `Sheet!A1`. **No table-facts card** (a group total from a truncated Excel scan would be a lie). |
-| **`.xls`** | Prefer Excel **Save As** to a temp `.xlsx`, then the same formula inventory. If Excel is missing: values/schema only, with an English notice that stored formulas are not readable. | Same as `.xlsx` after convert. Values-only fallback has no formulas. **No table-facts card** on the usual Excel path. |
+| **`.xlsx` / `.xlsm`** | openpyxl: stored formulas, named ranges, external links. Schema samples may use the first 2,000 rows. VBA / Power Query / Pivot / DAX: detect only. | Named ranges, links, “where is X”, `Sheet!A1`. **Table-facts card** only when the **file** is not formula-heavy (about 20 stored formulas or fewer) **and** the sheet looks like a data grid (headers, many rows, few formulas). Otherwise the CSV hint. |
+| **`.xls`** | Prefer Excel **Save As** to a temp `.xlsx`, then the same path as `.xlsx`. If Excel is missing: values/schema only, with an English notice that stored formulas are not readable. | Same rules as `.xlsx` after convert. Values-only fallback may get a card if the scan is complete. |
 
 If you ask for a total / count / “which group is largest” on an Excel
 pack that has **no** table-facts card, the app answers at once:
@@ -85,14 +86,17 @@ table facts, so `Which file does Rates read?` is never treated as
    `'Sheet name'!A1` address. The app quotes that stored formula
    (cell + formula + label) from the full local formula index. If the
    cell is not there, it says so. It does not open Excel again.
-6. **Table facts (CSV card)** — `how many` / `list` / min-max-sum /
-   `which … costs the most` / largest single row. Answers come only
-   from the card built at attach. The app does not re-read the file
-   and does not send rows to the model.
+6. **Table facts** — `how many` / `list` / min-max-sum /
+   `which … costs the most` / largest single row. The card exists for
+   a **CSV** (always, full file) and for a **data-grid `.xlsx`**
+   (headers, many rows, few formulas in the whole file). Formula
+   models (Ginzu, WACC) have no card. Answers come only from the card
+   built at attach. The app does not re-read the file and does not
+   send rows to the model.
 
 If the question matches one of those six, the model is **not**
 called. That is intentional: the inventory is the source of truth
-for names, links, stored cells, and CSV aggregates.
+for names, links, stored cells, and table aggregates.
 
 `How is …`, `Explain …`, and `Suggest …` are **not** magic words.
 They usually go to the model because they do **not** match the list
@@ -156,11 +160,13 @@ Named range: `RateTable` → `Rates!$A$1:$C$3`.
 | `Explain the Rates!E2 formula in plain English.` | Inventory, instant | Same quote: the question names `Rates!E2`. |
 | `Suggest a paste-ready formula that looks up a name the same way Rates already does.` | Model, spinner | Prefer a formula that quotes `=[Books.xlsx]Books!B2`. If the model assigns a different formula to a listed cell, a correction appears under the draft. |
 
-### Tiny example (CSV table facts)
+### Tiny example (CSV or data-grid `.xlsx` table facts)
 
-A large CSV is **not** sampled for totals. Imagine `agency,amount,year`
-with tens of thousands of rows. The first 2,000 rows might only show
-early names; a later group can still have the largest **sum**.
+A large table is **not** sampled for totals. A CSV, or the same table
+saved as `.xlsx` from Excel or LibreOffice, is fine if the Excel file
+is not a formula model. Imagine `agency,amount,year` with tens of
+thousands of rows. The first 2,000 rows might only show early names;
+a later group can still have the largest **sum**.
 
 | You type | Path | Typical reply |
 | --- | --- | --- |
@@ -171,8 +177,9 @@ early names; a later group can still have the largest **sum**.
 | `What is the largest single row?` | Inventory, instant | The max row only, labelled as not a total. |
 | `Which country costs the most?` | Inventory, instant | Not on the card, plus **Available columns:** from that card. |
 
-The same “which group is largest” question on a `.xlsx` pack that has
-no card gets the CSV attach hint. It does not start a generate.
+The same “which group is largest” question on a **formula** `.xlsx` (Ginzu,
+WACC) that has no card gets the CSV attach hint. A **data** `.xlsx`
+(headers + many rows, few formulas) gets the same instant card as a CSV.
 
 ### Tiny example (cost of capital on one sheet)
 
@@ -193,8 +200,8 @@ no card gets the CSV attach hint. It does not start a generate.
 ### Practical rule
 
 - **Where / named ranges / external links / which file does X read / what does Sheet!A1 do** → trust the instant answer; it came from the formula inventory.
-- **List / how many / min-max-sum / which group is largest** on a **CSV** with a table-facts card → instant. Trust the **sum** line for “costs the most”; the max row is labelled on purpose.
-- **The same total questions on `.xlsx` / `.xls`** → instant refuse + ask for a CSV. The model is not asked to invent a total.
+- **List / how many / min-max-sum / which group is largest** on a **CSV** or a **data-grid `.xlsx`** (table-facts card) → instant. Trust the **sum** line for “costs the most”; the max row is labelled on purpose.
+- **The same total questions on a formula `.xlsx` / `.xls`** (Ginzu, WACC; no card) → instant refuse + ask for a CSV.
 - **How / explain / suggest** (no `Sheet!A1` in the question) → the model is drafting; existing formulas should appear only after the app resolves a `[[FORMULA:…]]` cite. Reconcile with the inventory list before you change Excel.
 
 ## Requirements (developers only)

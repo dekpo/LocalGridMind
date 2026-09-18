@@ -110,7 +110,7 @@ inventory turn if lookup invented a cell.
 
 ---
 
-## File C — large CSV table facts (optional)
+## File C — large table facts (CSV, optional `.xlsx`)
 
 Use your own wide CSV (for example a revenue-by-agency file). **New
 chat.** Attach that file only. Model may stay unloaded.
@@ -134,6 +134,11 @@ group total.
 
 Formula files (A / B) must still answer named ranges, links, where-is,
 and `Sheet!A1` instantly.
+
+Optional: **Save As** that CSV to `.xlsx` (Excel or LibreOffice
+Calc, Excel 2007–365 format — not ODS). New chat. Attach the
+`.xlsx`. Q2–Q6 must match the CSV answers (same sums). Ginzu must
+still refuse table facts with the CSV hint.
 
 ---
 

@@ -19,6 +19,11 @@ MAX_LABEL_CHARS = 48
 YEAR_MIN = 1900
 YEAR_MAX = 2100
 NUMERIC_SHARE = 0.5
+# Excel table-facts: skip formula-heavy workbooks (Ginzu / WACC models).
+TABULAR_MAX_FILE_FORMULAS = 20
+TABULAR_MAX_FORMULA_RATIO = 0.05
+TABULAR_MIN_ROWS = 8
+TABULAR_MIN_COLUMNS = 2
 _ID_NAMES = frozenset(
     {"id", "ids", "index", "row", "rows", "n", "no", "num", "number", "pk"}
 )
@@ -121,6 +126,27 @@ class SheetStats:
             or self.group_sums
             or self.max_rows
         )
+
+
+def file_allows_tabular_stats(formula_total: int) -> bool:
+    """False for formula models. A couple of lookups in a data table is fine."""
+    return int(formula_total or 0) <= TABULAR_MAX_FILE_FORMULAS
+
+
+def sheet_looks_tabular(
+    *,
+    row_count: int,
+    column_count: int,
+    formula_count: int,
+    hidden: bool = False,
+) -> bool:
+    """Header-style data grid, not a labeled calculator sheet."""
+    if hidden:
+        return False
+    if row_count < TABULAR_MIN_ROWS or column_count < TABULAR_MIN_COLUMNS:
+        return False
+    ratio = formula_count / max(int(row_count), 1)
+    return ratio <= TABULAR_MAX_FORMULA_RATIO
 
 
 def build_sheet_stats(frame: pd.DataFrame) -> SheetStats | None:

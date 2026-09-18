@@ -64,9 +64,9 @@ The browser should open on its own (usually
 
 1. In **Local model**, you may leave the model **Unloaded** for
    inventory questions (named ranges, links, where-is, `Sheet!A1`,
-   CSV row counts and totals). Click **Load model** only when you
-   need an explanation or a suggested formula, then wait for
-   **Ready** (several minutes the first time).
+   row counts and totals on a CSV or a data-grid `.xlsx`). Click
+   **Load model** only when you need an explanation or a suggested
+   formula, then wait for **Ready** (several minutes the first time).
 2. Attach a workbook (paperclip) or a folder of linked workbooks.
    Wait for the English inventory turn.
 3. Ask in English in the thread. Instant answers (no spinner, no
