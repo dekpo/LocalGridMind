@@ -136,6 +136,7 @@ Named range: `RateTable` → `Rates!$A$1:$C$3`.
 ### Practical rule
 
 - **Where / named ranges / external links / which file does X read / what does Sheet!A1 do** → trust the instant answer; it came from the file scan.
+- **List / how many / min-max-sum / which group is largest** on an attached table → instant table facts. A group **total** is not the same as the largest **single row**.
 - **How / explain / suggest** (no `Sheet!A1` in the question) → the model is drafting; existing formulas should appear only after the app resolves a `[[FORMULA:…]]` cite. Reconcile with the inventory list before you change Excel.
 
 ## Requirements (developers only)

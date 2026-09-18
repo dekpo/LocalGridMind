@@ -11,7 +11,7 @@ INVENTORY_PREAMBLE = (
     "You are helping a finance analyst understand spreadsheet structure and logic. "
     "The workbook inventory is the only source of truth. "
     "Use only the workbook inventory below. "
-    "If a formula, named range, link, or cell is not listed, say it is not "
+    "If a formula, named range, link, cell, or table fact is not listed, say it is not "
     "in the inventory. "
     "Do not invent cell addresses or named ranges. "
     "Never invent workbook names, file names, sheet names, existing formulas, "

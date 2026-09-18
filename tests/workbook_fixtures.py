@@ -96,6 +96,59 @@ def write_mixed_csv(path: Path) -> Path:
     return path
 
 
+def write_agency_costs_csv(
+    path: Path,
+    *,
+    early_count: int = 8,
+    late_count: int = 6,
+    early_amount: float = 1,
+    late_amount: float = 1000,
+    max_row_amount: float = 4000,
+) -> Path:
+    """Synthetic agency table. Late names sit after `early_count` rows.
+
+    Default: Alpha sum is small, Zulu has the largest *sum*, Omega has
+    the largest *single row*. Used to prove max-row ≠ group total.
+    """
+    lines = ["agency,amount,year"]
+    for _ in range(early_count):
+        lines.append(f"Alpha,{_csv_number(early_amount)},2010")
+    for _ in range(late_count):
+        lines.append(f"Zulu,{_csv_number(late_amount)},2020")
+    lines.append(f"Omega,{_csv_number(max_row_amount)},2021")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def write_agency_and_subagency_csv(path: Path) -> Path:
+    """Agency vs sub_agency: 'list the agencies' must not fail closed."""
+    path.write_text(
+        "agency,sub_agency,amount,year\n"
+        "Alpha,Alpha-1,10,2010\n"
+        "Alpha,Alpha-2,20,2011\n"
+        "Zulu,Zulu-1,1000,2020\n"
+        "Zulu,Zulu-2,2000,2020\n"
+        "Omega,Omega-1,400,2021\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def write_many_agencies_csv(path: Path, count: int = 48) -> Path:
+    """One row per agency so all names must appear on the stats card."""
+    lines = ["agency,amount,year"]
+    for index in range(1, count + 1):
+        lines.append(f"Agency_{index:02d},{index},2015")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _csv_number(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return str(value)
+
+
 def write_tiny_xls(path: Path) -> Path:
     """Synthetic BIFF2 workbook. No client files; no xlwt binary."""
     import struct

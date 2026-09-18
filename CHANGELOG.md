@@ -5,6 +5,23 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
+### Phase 6.5 — Tabular facts (2026-09-12)
+
+A large CSV is inventoried once from every row. Column samples may
+still use the first 2,000 rows; table facts do not. The English
+inventory shows the full row count, low-cardinality values, numeric
+min/max/sum, year range, the top five group totals, and the largest
+single row (labelled as a row, not a total).
+
+Questions such as “list the agencies”, “how many rows”, “sum of
+amount”, and “which agency costs the most” are answered from that
+card with no model generate. A group total and a max row stay
+separate. If the column is not on the card, the app says so.
+
+Formula lookup (named ranges, links, where-is, `Sheet!A1`) is
+unchanged. No RAG, no extra context window, no rows sent to the
+model. Tests use synthetic CSV only.
+
 ### Hide Streamlit Deploy and the app menu (2026-09-12)
 
 `.streamlit/config.toml` sets `client.toolbarMode = "minimal"` so the
