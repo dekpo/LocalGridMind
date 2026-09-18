@@ -5,22 +5,26 @@ Public history only. Local helper files (`AGENTS.md`, `PROJECT_STATUS.md`,
 
 ## Unreleased
 
-### Phase 6.5 — Tabular facts (2026-09-12)
+### Phase 6.5 — Tabular facts (2026-09-12, human-checked 2026-09-18)
 
-A large CSV is inventoried once from every row. Column samples may
-still use the first 2,000 rows; table facts do not. The English
-inventory shows the full row count, low-cardinality values, numeric
-min/max/sum, year range, the top five group totals, and the largest
-single row (labelled as a row, not a total).
+A **CSV** is inventoried once from every row. Column samples may still
+use the first 2,000 rows; table facts do not. The English inventory
+shows the full row count, low-cardinality values, numeric min/max/sum,
+year range, the top five group **totals** (sum of all rows), and the
+largest **single row** (labelled as a row, not a total).
 
 Questions such as “list the agencies”, “how many rows”, “sum of
 amount”, and “which agency costs the most” are answered from that
-card with no model generate. A group total and a max row stay
-separate. If the column is not on the card, the app says so.
+card with no model generate. If the column is not on the card, the
+app lists **Available columns**. `.xlsx` / `.xls` packs do **not**
+get a table-facts card (the formula scan is capped). The same total
+question then says to attach the table as a CSV. Instant; no spinner.
 
 Formula lookup (named ranges, links, where-is, `Sheet!A1`) is
 unchanged. No RAG, no extra context window, no rows sent to the
-model. Tests use synthetic CSV only.
+model. Tests use synthetic CSV only. Human check: 35,854-row revenue
+CSV (UN-DPO sum vs 8.5e9 max row) plus Ginzu / `wacccalc.xls` CSV
+hint.
 
 ### Hide Streamlit Deploy and the app menu (2026-09-12)
 

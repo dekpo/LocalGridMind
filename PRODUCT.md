@@ -12,8 +12,9 @@ their data and logic understandable, extractable, and simpler to reuse.
 - Data analysts in finance / banking
 - No Python, no command line
 - Work on confidential workbooks that must stay on the machine
-- Typical files: multi-sheet `.xlsx`, `.csv`, lookups across files,
-  external workbook links, nested joins, dense Excel formulas
+- Typical files: multi-sheet `.xlsx` / `.xlsm`, older `.xls`, `.csv`,
+  lookups across files, external workbook links, nested joins, dense
+  Excel formulas
 
 ## What the product must do (v1 priority)
 
@@ -46,9 +47,10 @@ their data and logic understandable, extractable, and simpler to reuse.
 
 | User sees | Engine does (hidden) |
 | --- | --- |
-| ChatGPT-like thread (user on the right, answers on the left, input fixed at the bottom) | Instant inventory lookup for fact questions; otherwise local GGUF completion with reasoning tags stripped |
-| File / folder picker, English UI | Copy once under `data/uploads/`; openpyxl / Pandas load |
-| “Where is X / named ranges / links / which file does this read?” | App quotes the cached inventory. No model retrieve. |
+| ChatGPT-like thread (user on the right, answers on the left, input fixed at the bottom) | Instant inventory lookup for fact questions (formulas, links, cells, CSV table facts). Otherwise local GGUF completion with reasoning tags stripped |
+| File / folder picker, English UI | Copy once under `data/uploads/`. `.csv`: Pandas, full rows. `.xlsx` / `.xlsm`: openpyxl formulas. `.xls`: Excel Save As when possible, else values only |
+| “Where is X / named ranges / links / which file does this read? / what does Sheet!A1 do?” | App quotes the cached formula inventory. No model retrieve. |
+| “How many rows / list values / min-max-sum / which group is largest?” | App quotes the CSV table-facts card when it exists. No model. No RAG. Excel without a card: ask to attach a CSV. |
 | Explanations and suggested Excel formulas | Compact inventory + question sent to the local LLM |
 | Download a cleaner workbook | Restricted local execution, then export (later phase) |
 
@@ -88,6 +90,10 @@ tables and stored formulas, not as a magic black box.
 ### What v1 can do well
 
 - Inventory sheets, columns, types, samples, and empty regions.
+- Answer **stored facts without the model**: named ranges, external
+  links, “where is X”, `Sheet!A1`, and CSV table aggregates (counts,
+  distincts, min/max/sum, which group is largest). A group **sum** is
+  not a max row.
 - Read **stored** Excel formulas and named ranges (openpyxl).
 - Map external links such as `[Other.xlsx]Sheet!A1`.
 - Join and extract when keys can be inferred or confirmed.
@@ -110,7 +116,9 @@ tables and stored formulas, not as a magic black box.
 ### Engine rule
 
 The local LLM is a **hidden generator** of Pandas scripts and Excel
-formula text. It must not invent numeric answers in tokens. Users never
-see the Python. End users never use a terminal. Distribution is a
-portable folder (`LocalGridMind.exe` + sibling `models/`), not a 9 GB
-single exe and not a `pip` install on analyst PCs.
+formula text. It must not invent numeric answers in tokens. Stored
+workbook facts and CSV table totals are computed by the app at attach
+time, not by the model. Users never see the Python. End users never
+use a terminal. Distribution is a portable folder
+(`LocalGridMind.exe` + sibling `models/`), not a 9 GB single exe and
+not a `pip` install on analyst PCs.
